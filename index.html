@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>GLB + JPG + Grana Sketchfab-style + UI nascosta all'avvio</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: monospace; background: #111; }
+        
+        /* Pulsante compatto per toggle UI */
+        #toggleUI {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(8px);
+            border: 1px solid #ff8800;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 300;
+            font-family: monospace;
+            transition: 0.2s;
+        }
+        #toggleUI:hover { background: #ff8800; color: #1e1e2a; }
+        
+        /* UI elements con transizione */
+        .ui {
+            transition: opacity 0.3s ease;
+        }
+        .hidden-ui {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        /* Pannello di controllo (scorrevole) */
+        .panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(12px);
+            border-radius: 16px;
+            padding: 15px;
+            width: 280px;
+            color: white;
+            font-size: 13px;
+            border: 1px solid #ff8800;
+            z-index: 200;
+            pointer-events: auto;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .panel h3 { margin: 8px 0 8px 0; font-size: 15px; text-align: center; color: #ffaa66; }
+        .slider-group { margin-bottom: 10px; }
+        .slider-group label { display: block; margin-bottom: 4px; font-size: 12px; }
+        input[type="range"] { width: 100%; cursor: pointer; background: #ff8800; height: 3px; border-radius: 3px; }
+        select { width: 100%; background: #222; color: white; border: 1px solid #ff8800; padding: 4px; border-radius: 6px; margin-top: 4px; }
+        .val { float: right; color: #ffaa66; }
+        button {
+            background: #ff8800;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 10px;
+            width: 100%;
+        }
+        .file-buttons {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(8px);
+            padding: 8px 15px;
+            border-radius: 30px;
+            display: flex;
+            gap: 10px;
+            z-index: 200;
+        }
+        .file-buttons label, .file-buttons button {
+            background: #ff8800;
+            padding: 4px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        input[type="file"] { display: none; }
+        #status {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: black;
+            color: #0f0;
+            padding: 5px 10px;
+            border-radius: 8px;
+            font-size: 11px;
+            z-index: 200;
+        }
+    </style>
+</head>
+<body>
+    <button id="toggleUI">🔘 Mostra UI</button>
+    
+    <div class="file-buttons ui hidden-ui">
+        <label for="glbInput">📦 GLB</label>
+        <input type="file" id="glbInput" accept=".glb">
+        <label for="jpgInput">🌆 JPG (panoramica)</label>
+        <input type="file" id="jpgInput" accept=".jpg,.jpeg">
+        <button id="resetCam">🔄 Reset camera</button>
+    </div>
+    
+    <div class="panel ui hidden-ui">
+        <h3>🎨 Colore & Tone</h3>
+        <div class="slider-group"><label>🔆 Esposizione <span id="expVal" class="val">1.8</span></label><input type="range" id="exposure" min="0.5" max="3" step="0.01" value="1.8"></div>
+        <div class="slider-group"><label>🎚️ Contrasto <span id="conVal" class="val">1.0</span></label><input type="range" id="contrast" min="0.5" max="2" step="0.01" value="1.0"></div>
+        <div class="slider-group"><label>🌈 Saturazione <span id="satVal" class="val">1.0</span></label><input type="range" id="saturation" min="0" max="2" step="0.01" value="1.0"></div>
+        <div class="slider-group"><label>🎛️ Tone Boost <span id="toneBoostVal" class="val">0.0</span></label><input type="range" id="toneBoost" min="-0.5" max="0.5" step="0.01" value="0.0"></div>
+        <div class="slider-group"><label>🖼️ Spazio colore</label>
+            <select id="colorSpaceSelect">
+                <option value="SRGBColorSpace">SRGB (default)</option>
+                <option value="LinearSRGBColorSpace">Linear SRGB</option>
+                <option value="DisplayP3ColorSpace">Display P3</option>
+            </select>
+        </div>
+        <div class="slider-group"><label>🎨 Tone Mapping</label>
+            <select id="toneMappingSelect">
+                <option value="ACESFilmicToneMapping">ACES Filmic</option>
+                <option value="ReinhardToneMapping">Reinhard</option>
+                <option value="CineonToneMapping">Cineon</option>
+                <option value="LinearToneMapping">Lineare</option>
+                <option value="NoToneMapping">Nessuno</option>
+            </select>
+        </div>
+
+        <h3>🎞️ Grana (film grain style Sketchfab)</h3>
+        <div class="slider-group"><label>Intensità <span id="grainIntVal" class="val">0.00</span></label><input type="range" id="grainIntensity" min="0" max="0.5" step="0.001" value="0"></div>
+        <div class="slider-group"><label>Velocità <span id="grainSpeedVal" class="val">1.0</span></label><input type="range" id="grainSpeed" min="0" max="3" step="0.05" value="1.0"></div>
+        <div class="slider-group"><label>Dimensione (1=grossa, 5000=ultrafine) <span id="grainSizeVal" class="val">2500</span></label><input type="range" id="grainSize" min="1" max="5000" step="10" value="2500"></div>
+        <div class="slider-group"><label>Ruvidezza <span id="grainRoughVal" class="val">0.3</span></label><input type="range" id="grainRoughness" min="0" max="1" step="0.01" value="0.3"></div>
+
+        <h3>🌑 Vignetta</h3>
+        <div class="slider-group"><label>Intensità <span id="vigIntVal" class="val">0.00</span></label><input type="range" id="vignetteIntensity" min="0" max="1" step="0.01" value="0"></div>
+        <div class="slider-group"><label>Raggio <span id="vigRadVal" class="val">0.80</span></label><input type="range" id="vignetteRadius" min="0.1" max="1.5" step="0.01" value="0.8"></div>
+
+        <h3>🌑 Ambient Occlusion</h3>
+        <div class="slider-group"><label>Intensità <span id="aoIntVal" class="val">0.8</span></label><input type="range" id="aoIntensity" min="0" max="2" step="0.01" value="0.8"></div>
+        <div class="slider-group"><label>Raggio <span id="aoRadVal" class="val">0.5</span></label><input type="range" id="aoRadius" min="0.1" max="2" step="0.01" value="0.5"></div>
+        <div class="slider-group"><label>Bias <span id="aoBiasVal" class="val">0.05</span></label><input type="range" id="aoBias" min="0" max="0.5" step="0.001" value="0.05"></div>
+        <button id="toggleAO">🔘 Disattiva AO</button>
+        <button id="resetEffects">⟳ Reset effetti</button>
+    </div>
+    
+    <div id="status" class="ui hidden-ui">Caricamento automatico invito.glb e environment.jpg...</div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
+        import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+
+        // ------------------------------------------------------------------
+        // Shader Grana migliorato (stile Sketchfab - rumore più naturale)
+        // ------------------------------------------------------------------
+        const grainShader = {
+            uniforms: {
+                tDiffuse: { value: null },
+                intensity: { value: 0 },
+                speed: { value: 1.0 },
+                size: { value: 2500.0 },
+                roughness: { value: 0.3 },
+                time: { value: 0 }
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D tDiffuse;
+                uniform float intensity;
+                uniform float speed;
+                uniform float size;
+                uniform float roughness;
+                uniform float time;
+                varying vec2 vUv;
+
+                // Rumore di alta qualità (distribuzione gaussiana approssimata)
+                float highQualityNoise(vec2 uv, float t) {
+                    vec2 grid = uv * size;
+                    vec2 i = floor(grid);
+                    vec2 f = fract(grid);
+                    float t2 = t * speed;
+                    vec4 rand;
+                    rand.x = fract(sin(i.x * 12.9898 + i.y * 78.233 + t2) * 43758.5453);
+                    rand.y = fract(sin((i.x+1.0) * 12.9898 + i.y * 78.233 + t2) * 43758.5453);
+                    rand.z = fract(sin(i.x * 12.9898 + (i.y+1.0) * 78.233 + t2) * 43758.5453);
+                    rand.w = fract(sin((i.x+1.0) * 12.9898 + (i.y+1.0) * 78.233 + t2) * 43758.5453);
+                    float mixX1 = mix(rand.x, rand.y, f.x);
+                    float mixX2 = mix(rand.z, rand.w, f.x);
+                    float grain = mix(mixX1, mixX2, f.y);
+                    // Applica ruvidezza (effetto di contrasto nel rumore)
+                    grain = pow(grain, 1.0 + roughness * 2.0);
+                    // Scala per ottenere una distribuzione più bilanciata
+                    return (grain - 0.5) * intensity;
+                }
+
+                void main() {
+                    vec4 color = texture2D(tDiffuse, vUv);
+                    float grain = highQualityNoise(vUv, time);
+                    vec3 finalColor = color.rgb + grain;
+                    gl_FragColor = vec4(finalColor, color.a);
+                }
+            `
+        };
+
+        const vignetteShader = {
+            uniforms: { tDiffuse: { value: null }, intensity: { value: 0 }, radius: { value: 0.8 } },
+            vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+            fragmentShader: `
+                uniform sampler2D tDiffuse;
+                uniform float intensity;
+                uniform float radius;
+                varying vec2 vUv;
+                void main() {
+                    vec4 col = texture2D(tDiffuse, vUv);
+                    float dist = length(vUv - 0.5);
+                    float vig = 1.0 - intensity * smoothstep(0.0, radius, dist);
+                    gl_FragColor = vec4(col.rgb * vig, col.a);
+                }
+            `
+        };
+
+        const colorShader = {
+            uniforms: {
+                tDiffuse: { value: null },
+                contrast: { value: 1.0 },
+                saturation: { value: 1.0 },
+                toneBoost: { value: 0.0 }
+            },
+            vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+            fragmentShader: `
+                uniform sampler2D tDiffuse;
+                uniform float contrast;
+                uniform float saturation;
+                uniform float toneBoost;
+                varying vec2 vUv;
+                void main() {
+                    vec4 col = texture2D(tDiffuse, vUv);
+                    vec3 c = (col.rgb - 0.5) * contrast + 0.5;
+                    float luma = dot(c, vec3(0.299, 0.587, 0.114));
+                    float boostedLuma = luma + toneBoost;
+                    c = c * (boostedLuma / (luma + 0.0001));
+                    float gray = dot(c, vec3(0.299, 0.587, 0.114));
+                    vec3 saturated = mix(vec3(gray), c, saturation);
+                    gl_FragColor = vec4(saturated, col.a);
+                }
+            `
+        };
+
+        // --- Setup renderer ---
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.8;
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        document.body.appendChild(renderer.domElement);
+
+        const scene = new THREE.Scene();
+        let activeCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        activeCamera.position.set(3, 2, 5);
+
+        // Effect composer
+        const composer = new EffectComposer(renderer);
+        composer.addPass(new RenderPass(scene, activeCamera));
+
+        const ssaoPass = new SSAOPass(scene, activeCamera, window.innerWidth, window.innerHeight);
+        ssaoPass.output = SSAOPass.OUTPUT.Default;
+        ssaoPass.intensity = 0.8;
+        ssaoPass.radius = 0.5;
+        ssaoPass.bias = 0.05;
+        composer.addPass(ssaoPass);
+
+        const colorPass = new ShaderPass(colorShader);
+        colorPass.renderToScreen = false;
+        composer.addPass(colorPass);
+
+        const grainPass = new ShaderPass(grainShader);
+        grainPass.renderToScreen = false;
+        composer.addPass(grainPass);
+
+        const vignettePass = new ShaderPass(vignetteShader);
+        vignettePass.renderToScreen = true;
+        composer.addPass(vignettePass);
+
+        let ssaoEnabled = true;
+        let modelRoot = null, mixer = null, totalDuration = 0, currentTime = 0, animatedCamera = null, currentEnv = null;
+        const pmrem = new THREE.PMREMGenerator(renderer);
+        pmrem.compileEquirectangularShader();
+
+        // Funzioni per caricare e applicare
+        function applyEnvToModel() {
+            if (!modelRoot || !currentEnv) return;
+            let count = 0;
+            modelRoot.traverse(child => {
+                if (child.isMesh && child.material) {
+                    const mats = Array.isArray(child.material) ? child.material : [child.material];
+                    mats.forEach(mat => { mat.envMap = currentEnv; mat.needsUpdate = true; count++; });
+                }
+            });
+            document.getElementById('status').innerText = `✅ ${count} materiali illuminati`;
+        }
+
+        function setEnv(texture) {
+            texture.mapping = THREE.EquirectangularReflectionMapping;
+            const env = pmrem.fromEquirectangular(texture).texture;
+            scene.environment = env;
+            scene.background = env;
+            currentEnv = env;
+            texture.dispose();
+            if (modelRoot) applyEnvToModel();
+            else document.getElementById('status').innerText = '✅ JPG pronto, attendi GLB';
+        }
+
+        function loadJPG(file) {
+            const reader = new FileReader();
+            reader.onload = e => {
+                const img = new Image();
+                img.onload = () => {
+                    const tex = new THREE.Texture(img);
+                    tex.needsUpdate = true;
+                    setEnv(tex);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function loadGLB(file) {
+            const reader = new FileReader();
+            reader.onload = e => {
+                const loader = new GLTFLoader();
+                loader.parse(e.target.result, '', gltf => {
+                    if (modelRoot) scene.remove(modelRoot);
+                    if (mixer) mixer.stopAllAction();
+                    modelRoot = gltf.scene;
+                    scene.add(modelRoot);
+
+                    const clips = gltf.animations;
+                    if (clips.length) {
+                        mixer = new THREE.AnimationMixer(modelRoot);
+                        let max = 0;
+                        clips.forEach(c => {
+                            const a = mixer.clipAction(c);
+                            a.loop = THREE.LoopOnce;
+                            a.clampWhenFinished = true;
+                            a.play();
+                            max = Math.max(max, c.duration);
+                        });
+                        totalDuration = max;
+                        currentTime = 0;
+                        mixer.setTime(0);
+                    }
+                    animatedCamera = null;
+                    modelRoot.traverse(n => { if (n.name === "Camera") animatedCamera = n; });
+                    if (!animatedCamera) modelRoot.traverse(n => { if (n.isCamera) animatedCamera = n; });
+                    if (animatedCamera) syncCamera();
+
+                    if (currentEnv) applyEnvToModel();
+                    else document.getElementById('status').innerText = '✅ Modello caricato, carica JPG';
+                });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function syncCamera() {
+            if (!animatedCamera) return;
+            const pos = animatedCamera.getWorldPosition(new THREE.Vector3());
+            const quat = animatedCamera.getWorldQuaternion(new THREE.Quaternion());
+            activeCamera.position.copy(pos);
+            activeCamera.quaternion.copy(quat);
+            if (animatedCamera.isCamera && animatedCamera.fov) {
+                activeCamera.fov = animatedCamera.fov;
+                activeCamera.updateProjectionMatrix();
+            }
+        }
+
+        function setTime(t) {
+            if (!mixer || totalDuration <= 0) return;
+            t = Math.min(totalDuration, Math.max(0, t));
+            currentTime = t;
+            mixer.setTime(currentTime);
+            mixer.update(0);
+        }
+
+        // Scroll animazione
+        window.addEventListener('wheel', e => {
+            if (!mixer || totalDuration <= 0) return;
+            const step = e.deltaY > 0 ? 0.05 : -0.05;
+            const nt = currentTime + step;
+            if (nt !== currentTime && nt >= 0 && nt <= totalDuration) {
+                setTime(nt);
+                syncCamera();
+                document.getElementById('status').innerText = `⏱️ ${currentTime.toFixed(2)}s / ${totalDuration.toFixed(2)}s`;
+            }
+            e.preventDefault();
+        }, { passive: false });
+
+        document.getElementById('resetCam').onclick = () => {
+            if (animatedCamera) syncCamera();
+            else { activeCamera.position.set(3, 2, 5); activeCamera.lookAt(0, 0, 0); }
+        };
+        
+        // Caricamento file da input utente
+        document.getElementById('glbInput').onchange = e => e.target.files[0] && loadGLB(e.target.files[0]);
+        document.getElementById('jpgInput').onchange = e => e.target.files[0] && loadJPG(e.target.files[0]);
+
+        window.ondragover = e => e.preventDefault();
+        window.ondrop = e => {
+            e.preventDefault();
+            const f = e.dataTransfer.files[0];
+            if (f.name.endsWith('.glb')) loadGLB(f);
+            if (f.name.endsWith('.jpg') || f.name.endsWith('.jpeg')) loadJPG(f);
+        };
+
+        // --- UI Toggle (inizialmente nascosta) ---
+        const toggleBtn = document.getElementById('toggleUI');
+        const uiElements = document.querySelectorAll('.ui');
+        let uiVisible = false;
+        toggleBtn.addEventListener('click', () => {
+            uiVisible = !uiVisible;
+            uiElements.forEach(el => {
+                if (uiVisible) el.classList.remove('hidden-ui');
+                else el.classList.add('hidden-ui');
+            });
+            toggleBtn.textContent = uiVisible ? '🔘 Nascondi UI' : '🔘 Mostra UI';
+        });
+        
+        // --- Controlli UI (stessi di prima) ---
+        const expSlider = document.getElementById('exposure');
+        const expVal = document.getElementById('expVal');
+        expSlider.addEventListener('input', () => { let v = parseFloat(expSlider.value); expVal.innerText = v; renderer.toneMappingExposure = v; });
+
+        const conSlider = document.getElementById('contrast');
+        const conVal = document.getElementById('conVal');
+        conSlider.addEventListener('input', () => { let v = parseFloat(conSlider.value); conVal.innerText = v; colorPass.uniforms.contrast.value = v; });
+
+        const satSlider = document.getElementById('saturation');
+        const satVal = document.getElementById('satVal');
+        satSlider.addEventListener('input', () => { let v = parseFloat(satSlider.value); satVal.innerText = v; colorPass.uniforms.saturation.value = v; });
+
+        const toneBoostSlider = document.getElementById('toneBoost');
+        const toneBoostVal = document.getElementById('toneBoostVal');
+        toneBoostSlider.addEventListener('input', () => { let v = parseFloat(toneBoostSlider.value); toneBoostVal.innerText = v; colorPass.uniforms.toneBoost.value = v; });
+
+        const colorSpaceSelect = document.getElementById('colorSpaceSelect');
+        colorSpaceSelect.addEventListener('change', () => { renderer.outputColorSpace = THREE[colorSpaceSelect.value]; });
+
+        const toneMappingSelect = document.getElementById('toneMappingSelect');
+        toneMappingSelect.addEventListener('change', () => { renderer.toneMapping = THREE[toneMappingSelect.value]; });
+
+        // Grain
+        const grainIntSlider = document.getElementById('grainIntensity');
+        const grainIntVal = document.getElementById('grainIntVal');
+        const grainSpeedSlider = document.getElementById('grainSpeed');
+        const grainSpeedVal = document.getElementById('grainSpeedVal');
+        const grainSizeSlider = document.getElementById('grainSize');
+        const grainSizeVal = document.getElementById('grainSizeVal');
+        const grainRoughSlider = document.getElementById('grainRoughness');
+        const grainRoughVal = document.getElementById('grainRoughVal');
+
+        grainIntSlider.addEventListener('input', () => { let v = parseFloat(grainIntSlider.value); grainIntVal.innerText = v.toFixed(3); grainPass.uniforms.intensity.value = v; });
+        grainSpeedSlider.addEventListener('input', () => { let v = parseFloat(grainSpeedSlider.value); grainSpeedVal.innerText = v; grainPass.uniforms.speed.value = v; });
+        grainSizeSlider.addEventListener('input', () => { let v = parseFloat(grainSizeSlider.value); grainSizeVal.innerText = v; grainPass.uniforms.size.value = v; });
+        grainRoughSlider.addEventListener('input', () => { let v = parseFloat(grainRoughSlider.value); grainRoughVal.innerText = v; grainPass.uniforms.roughness.value = v; });
+
+        let grainTime = 0;
+        function animateGrain() { grainTime += 0.02; grainPass.uniforms.time.value = grainTime; requestAnimationFrame(animateGrain); }
+        animateGrain();
+
+        // Vignetta
+        const vigIntSlider = document.getElementById('vignetteIntensity');
+        const vigIntVal = document.getElementById('vigIntVal');
+        const vigRadSlider = document.getElementById('vignetteRadius');
+        const vigRadVal = document.getElementById('vigRadVal');
+        vigIntSlider.addEventListener('input', () => { let v = parseFloat(vigIntSlider.value); vigIntVal.innerText = v.toFixed(2); vignettePass.uniforms.intensity.value = v; });
+        vigRadSlider.addEventListener('input', () => { let v = parseFloat(vigRadSlider.value); vigRadVal.innerText = v.toFixed(2); vignettePass.uniforms.radius.value = v; });
+
+        // AO
+        const aoIntSlider = document.getElementById('aoIntensity');
+        const aoIntVal = document.getElementById('aoIntVal');
+        const aoRadSlider = document.getElementById('aoRadius');
+        const aoRadVal = document.getElementById('aoRadVal');
+        const aoBiasSlider = document.getElementById('aoBias');
+        const aoBiasVal = document.getElementById('aoBiasVal');
+        const aoToggleBtn = document.getElementById('toggleAO');
+
+        function updateAO() {
+            if (!ssaoEnabled) return;
+            ssaoPass.intensity = parseFloat(aoIntSlider.value);
+            ssaoPass.radius = parseFloat(aoRadSlider.value);
+            ssaoPass.bias = parseFloat(aoBiasSlider.value);
+            aoIntVal.innerText = ssaoPass.intensity;
+            aoRadVal.innerText = ssaoPass.radius;
+            aoBiasVal.innerText = ssaoPass.bias;
+        }
+        aoIntSlider.addEventListener('input', updateAO);
+        aoRadSlider.addEventListener('input', updateAO);
+        aoBiasSlider.addEventListener('input', updateAO);
+        aoToggleBtn.addEventListener('click', () => {
+            ssaoEnabled = !ssaoEnabled;
+            if (ssaoEnabled) {
+                if (composer.passes.indexOf(ssaoPass) === -1) composer.addPass(ssaoPass);
+                aoToggleBtn.textContent = '🔘 Disattiva AO';
+                updateAO();
+            } else {
+                const idx = composer.passes.indexOf(ssaoPass);
+                if (idx !== -1) composer.removePass(ssaoPass);
+                aoToggleBtn.textContent = '🔘 Attiva AO';
+            }
+        });
+        updateAO();
+
+        // Reset effetti
+        document.getElementById('resetEffects').addEventListener('click', () => {
+            expSlider.value = '1.8'; expSlider.dispatchEvent(new Event('input'));
+            conSlider.value = '1.0'; conSlider.dispatchEvent(new Event('input'));
+            satSlider.value = '1.0'; satSlider.dispatchEvent(new Event('input'));
+            toneBoostSlider.value = '0.0'; toneBoostSlider.dispatchEvent(new Event('input'));
+            colorSpaceSelect.value = 'SRGBColorSpace'; colorSpaceSelect.dispatchEvent(new Event('change'));
+            toneMappingSelect.value = 'ACESFilmicToneMapping'; toneMappingSelect.dispatchEvent(new Event('change'));
+            grainIntSlider.value = '0'; grainIntSlider.dispatchEvent(new Event('input'));
+            grainSpeedSlider.value = '1.0'; grainSpeedSlider.dispatchEvent(new Event('input'));
+            grainSizeSlider.value = '2500'; grainSizeSlider.dispatchEvent(new Event('input'));
+            grainRoughSlider.value = '0.3'; grainRoughSlider.dispatchEvent(new Event('input'));
+            vigIntSlider.value = '0'; vigIntSlider.dispatchEvent(new Event('input'));
+            vigRadSlider.value = '0.8'; vigRadSlider.dispatchEvent(new Event('input'));
+            aoIntSlider.value = '0.8'; aoRadSlider.value = '0.5'; aoBiasSlider.value = '0.05'; updateAO();
+            if (!ssaoEnabled) aoToggleBtn.click();
+        });
+
+        // --- Caricamento automatico dei file invito.glb e environment.jpg ---
+        async function autoLoad() {
+            try {
+                // Carica environment.jpg
+                const jpgResp = await fetch('./environment.jpg');
+                if (jpgResp.ok) {
+                    const blob = await jpgResp.blob();
+                    const file = new File([blob], 'environment.jpg', { type: 'image/jpeg' });
+                    loadJPG(file);
+                } else {
+                    document.getElementById('status').innerText = '⚠️ environment.jpg non trovato. Caricalo manualmente.';
+                }
+            } catch(e) { console.warn('Auto-load JPG failed', e); }
+            
+            try {
+                // Carica invito.glb
+                const glbResp = await fetch('./invito.glb');
+                if (glbResp.ok) {
+                    const blob = await glbResp.blob();
+                    const file = new File([blob], 'invito.glb', { type: 'model/gltf-binary' });
+                    loadGLB(file);
+                } else {
+                    document.getElementById('status').innerText += ' invito.glb non trovato.';
+                }
+            } catch(e) { console.warn('Auto-load GLB failed', e); }
+        }
+        
+        autoLoad();
+
+        // Loop animazione
+        function animate() {
+            requestAnimationFrame(animate);
+            if (mixer) mixer.update(0);
+            if (animatedCamera) syncCamera();
+            composer.render();
+        }
+        animate();
+
+        window.onresize = () => {
+            activeCamera.aspect = window.innerWidth / window.innerHeight;
+            activeCamera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+            ssaoPass.setSize(window.innerWidth, window.innerHeight);
+        };
+    </script>
+</body>
+</html>
