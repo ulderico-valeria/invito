@@ -1,554 +1,408 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>GLB + JPG - Mobile Touch Scroll Animation</title>
-    <style>
-        body { margin: 0; overflow: hidden; font-family: monospace; background: #111; touch-action: none; }
-        #toggleUI {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(0,0,0,0.7);
-            backdrop-filter: blur(8px);
-            border: 1px solid #ff8800;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 40px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-            z-index: 300;
-            font-family: monospace;
-            transition: 0.2s;
-            touch-action: manipulation;
-        }
-        #toggleUI:active { background: #ff8800; color: #1e1e2a; }
-        .ui { transition: opacity 0.3s ease, visibility 0.3s ease; }
-        .hidden-ui {
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-        }
-        .panel {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(0,0,0,0.85);
-            backdrop-filter: blur(12px);
-            border-radius: 16px;
-            padding: 15px;
-            width: 280px;
-            color: white;
-            font-size: 13px;
-            border: 1px solid #ff8800;
-            z-index: 200;
-            pointer-events: auto;
-            max-height: 90vh;
-            overflow-y: auto;
-            touch-action: auto;
-        }
-        .panel h3 { margin: 8px 0 8px 0; font-size: 15px; text-align: center; color: #ffaa66; }
-        .slider-group { margin-bottom: 10px; }
-        .slider-group label { display: block; margin-bottom: 4px; font-size: 12px; }
-        input[type="range"] { width: 100%; cursor: pointer; background: #ff8800; height: 3px; border-radius: 3px; }
-        select { width: 100%; background: #222; color: white; border: 1px solid #ff8800; padding: 4px; border-radius: 6px; margin-top: 4px; }
-        .val { float: right; color: #ffaa66; }
-        button {
-            background: #ff8800;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-weight: bold;
-            margin-top: 10px;
-            width: 100%;
-            touch-action: manipulation;
-        }
-        .file-buttons {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            background: rgba(0,0,0,0.6);
-            backdrop-filter: blur(8px);
-            padding: 8px 15px;
-            border-radius: 30px;
-            display: flex;
-            gap: 10px;
-            z-index: 200;
-            flex-wrap: wrap;
-        }
-        .file-buttons label, .file-buttons button {
-            background: #ff8800;
-            padding: 6px 12px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 12px;
-        }
-        input[type="file"] { display: none; }
-        #status {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            background: black;
-            color: #0f0;
-            padding: 5px 10px;
-            border-radius: 8px;
-            font-size: 11px;
-            z-index: 200;
-            pointer-events: none;
-        }
-        @media (max-width: 600px) {
-            .panel { width: 260px; padding: 12px; }
-            .file-buttons { font-size: 10px; gap: 6px; }
-            .file-buttons label, .file-buttons button { padding: 4px 10px; font-size: 10px; }
-            #toggleUI { padding: 6px 12px; font-size: 12px; }
-        }
-    </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>GLB Frame Scrubber</title>
+
+<style>
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    font-family: Arial, Helvetica, sans-serif;
+    touch-action: none;
+  }
+
+  canvas { display: block; }
+
+  #hint {
+    position: fixed;
+    left: 16px;
+    top: 16px;
+    z-index: 20;
+    color: #fff;
+    background: rgba(0,0,0,0.5);
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 12px;
+    line-height: 1.45;
+    pointer-events: none;
+    max-width: min(460px, calc(100vw - 32px));
+  }
+
+  #status {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 20;
+    color: #d9ffd9;
+    background: rgba(0,0,0,0.72);
+    border: 1px solid rgba(255,255,255,0.12);
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 12px;
+    line-height: 1.35;
+    max-width: min(420px, calc(100vw - 32px));
+    pointer-events: none;
+    white-space: pre-line;
+  }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
 </head>
+
 <body>
-    <button id="toggleUI">🔘 Mostra UI</button>
-    
-    <div class="file-buttons ui hidden-ui">
-        <label for="glbInput">📦 GLB</label>
-        <input type="file" id="glbInput" accept=".glb">
-        <label for="jpgInput">🌆 JPG (panoramica)</label>
-        <input type="file" id="jpgInput" accept=".jpg,.jpeg">
-        <button id="resetCam">🔄 Reset camera</button>
-    </div>
-    
-    <div class="panel ui hidden-ui">
-        <h3>🎨 Colore & Tone</h3>
-        <div class="slider-group"><label>🔆 Esposizione <span id="expVal" class="val">1.8</span></label><input type="range" id="exposure" min="0.5" max="3" step="0.01" value="1.8"></div>
-        <div class="slider-group"><label>🎚️ Contrasto <span id="conVal" class="val">1.0</span></label><input type="range" id="contrast" min="0.5" max="2" step="0.01" value="1.0"></div>
-        <div class="slider-group"><label>🌈 Saturazione <span id="satVal" class="val">1.0</span></label><input type="range" id="saturation" min="0" max="2" step="0.01" value="1.0"></div>
-        <div class="slider-group"><label>🎛️ Tone Boost <span id="toneBoostVal" class="val">0.0</span></label><input type="range" id="toneBoost" min="-0.5" max="0.5" step="0.01" value="0.0"></div>
-        <div class="slider-group"><label>🖼️ Spazio colore</label>
-            <select id="colorSpaceSelect">
-                <option value="SRGBColorSpace">SRGB (default)</option>
-                <option value="LinearSRGBColorSpace">Linear SRGB</option>
-                <option value="DisplayP3ColorSpace">Display P3</option>
-            </select>
-        </div>
-        <div class="slider-group"><label>🎨 Tone Mapping</label>
-            <select id="toneMappingSelect">
-                <option value="ACESFilmicToneMapping">ACES Filmic</option>
-                <option value="ReinhardToneMapping">Reinhard</option>
-                <option value="CineonToneMapping">Cineon</option>
-                <option value="LinearToneMapping">Lineare</option>
-                <option value="NoToneMapping">Nessuno</option>
-            </select>
-        </div>
+  <div id="hint">Scroll / swipe verticale: un frame per scatto.<br>Nessun mouse orbit, solo scrubbing della timeline.</div>
+  <div id="status">Inizializzazione...</div>
 
-        <h3>🎞️ Grana (film grain)</h3>
-        <div class="slider-group"><label>Intensità <span id="grainIntVal" class="val">0.00</span></label><input type="range" id="grainIntensity" min="0" max="0.5" step="0.001" value="0"></div>
-        <div class="slider-group"><label>Velocità <span id="grainSpeedVal" class="val">1.0</span></label><input type="range" id="grainSpeed" min="0" max="3" step="0.05" value="1.0"></div>
-        <div class="slider-group"><label>Dimensione (1=grossa, 5000=ultrafine) <span id="grainSizeVal" class="val">2500</span></label><input type="range" id="grainSize" min="1" max="5000" step="10" value="2500"></div>
-        <div class="slider-group"><label>Ruvidezza <span id="grainRoughVal" class="val">0.3</span></label><input type="range" id="grainRoughness" min="0" max="1" step="0.01" value="0.3"></div>
+  <script>
+    (function () {
+      const statusEl = document.getElementById('status');
 
-        <h3>🌑 Vignetta</h3>
-        <div class="slider-group"><label>Intensità <span id="vigIntVal" class="val">0.00</span></label><input type="range" id="vignetteIntensity" min="0" max="1" step="0.01" value="0"></div>
-        <div class="slider-group"><label>Raggio <span id="vigRadVal" class="val">0.80</span></label><input type="range" id="vignetteRadius" min="0.1" max="1.5" step="0.01" value="0.8"></div>
+      function setStatus(msg) {
+        statusEl.textContent = msg;
+      }
 
-        <h3>🌑 Ambient Occlusion</h3>
-        <div class="slider-group"><label>Intensità <span id="aoIntVal" class="val">0.0</span></label><input type="range" id="aoIntensity" min="0" max="2" step="0.01" value="0"></div>
-        <div class="slider-group"><label>Raggio <span id="aoRadVal" class="val">0.5</span></label><input type="range" id="aoRadius" min="0.1" max="2" step="0.01" value="0.5"></div>
-        <div class="slider-group"><label>Bias <span id="aoBiasVal" class="val">0.05</span></label><input type="range" id="aoBias" min="0" max="0.5" step="0.001" value="0.05"></div>
-        <button id="toggleAO">🔘 Attiva AO</button>
-        <button id="resetEffects">⟳ Reset effetti</button>
-    </div>
-    
-    <div id="status" class="ui hidden-ui">Caricamento automatico invito.glb e environment.jpg...</div>
+      function clamp(v, min, max) {
+        return Math.max(min, Math.min(max, v));
+      }
 
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
+      function uniqueSorted(values) {
+        const filtered = values.filter((v) => Number.isFinite(v));
+        const uniq = Array.from(new Set(filtered.map((v) => +v.toFixed(6))));
+        uniq.sort((a, b) => a - b);
+        return uniq;
+      }
+
+      function collectFrameTimesFromClip(clip) {
+        const times = [];
+
+        clip.tracks.forEach((track) => {
+          if (track && track.times && track.times.length) {
+            for (let i = 0; i < track.times.length; i++) {
+              times.push(track.times[i]);
             }
-        }
-    </script>
-    <script type="module">
-        import * as THREE from 'three';
-        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-        import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
-        import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-
-        // Shader Grana
-        const grainShader = {
-            uniforms: { tDiffuse: { value: null }, intensity: { value: 0 }, speed: { value: 1.0 }, size: { value: 2500.0 }, roughness: { value: 0.3 }, time: { value: 0 } },
-            vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-            fragmentShader: `
-                uniform sampler2D tDiffuse; uniform float intensity; uniform float speed; uniform float size; uniform float roughness; uniform float time;
-                varying vec2 vUv;
-                float highQualityNoise(vec2 uv, float t) {
-                    vec2 grid = uv * size; vec2 i = floor(grid); vec2 f = fract(grid); float t2 = t * speed;
-                    vec4 rand;
-                    rand.x = fract(sin(i.x * 12.9898 + i.y * 78.233 + t2) * 43758.5453);
-                    rand.y = fract(sin((i.x+1.0) * 12.9898 + i.y * 78.233 + t2) * 43758.5453);
-                    rand.z = fract(sin(i.x * 12.9898 + (i.y+1.0) * 78.233 + t2) * 43758.5453);
-                    rand.w = fract(sin((i.x+1.0) * 12.9898 + (i.y+1.0) * 78.233 + t2) * 43758.5453);
-                    float mixX1 = mix(rand.x, rand.y, f.x); float mixX2 = mix(rand.z, rand.w, f.x);
-                    float grain = mix(mixX1, mixX2, f.y); grain = pow(grain, 1.0 + roughness * 2.0);
-                    return (grain - 0.5) * intensity;
-                }
-                void main() { vec4 color = texture2D(tDiffuse, vUv); float grain = highQualityNoise(vUv, time); gl_FragColor = vec4(color.rgb + grain, color.a); }
-            `
-        };
-        const vignetteShader = {
-            uniforms: { tDiffuse: { value: null }, intensity: { value: 0 }, radius: { value: 0.8 } },
-            vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-            fragmentShader: `
-                uniform sampler2D tDiffuse; uniform float intensity; uniform float radius; varying vec2 vUv;
-                void main() { vec4 col = texture2D(tDiffuse, vUv); float dist = length(vUv - 0.5); float vig = 1.0 - intensity * smoothstep(0.0, radius, dist); gl_FragColor = vec4(col.rgb * vig, col.a); }
-            `
-        };
-        const colorShader = {
-            uniforms: { tDiffuse: { value: null }, contrast: { value: 1.0 }, saturation: { value: 1.0 }, toneBoost: { value: 0.0 } },
-            vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-            fragmentShader: `
-                uniform sampler2D tDiffuse; uniform float contrast; uniform float saturation; uniform float toneBoost; varying vec2 vUv;
-                void main() {
-                    vec4 col = texture2D(tDiffuse, vUv); vec3 c = (col.rgb - 0.5) * contrast + 0.5;
-                    float luma = dot(c, vec3(0.299, 0.587, 0.114)); float boostedLuma = luma + toneBoost;
-                    c = c * (boostedLuma / (luma + 0.0001)); float gray = dot(c, vec3(0.299, 0.587, 0.114));
-                    vec3 saturated = mix(vec3(gray), c, saturation); gl_FragColor = vec4(saturated, col.a);
-                }
-            `
-        };
-
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1.8;
-        renderer.outputColorSpace = THREE.SRGBColorSpace;
-        document.body.appendChild(renderer.domElement);
-
-        const scene = new THREE.Scene();
-        let activeCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-        activeCamera.position.set(3, 2, 5);
-
-        const composer = new EffectComposer(renderer);
-        composer.addPass(new RenderPass(scene, activeCamera));
-
-        const ssaoPass = new SSAOPass(scene, activeCamera, window.innerWidth, window.innerHeight);
-        ssaoPass.output = SSAOPass.OUTPUT.Default;
-        ssaoPass.intensity = 0;
-        ssaoPass.radius = 0.5;
-        ssaoPass.bias = 0.05;
-        // Non aggiungo ancora ssaoPass, lo aggiungo solo se attivato
-        const colorPass = new ShaderPass(colorShader);
-        colorPass.renderToScreen = false;
-        composer.addPass(colorPass);
-        const grainPass = new ShaderPass(grainShader);
-        grainPass.renderToScreen = false;
-        grainPass.uniforms.intensity.value = 0;
-        composer.addPass(grainPass);
-        const vignettePass = new ShaderPass(vignetteShader);
-        vignettePass.renderToScreen = true;
-        vignettePass.uniforms.intensity.value = 0;
-        composer.addPass(vignettePass);
-
-        let ssaoEnabled = false;
-        let modelRoot = null, mixer = null, totalDuration = 0, currentTime = 0, animatedCamera = null, currentEnv = null;
-        const pmrem = new THREE.PMREMGenerator(renderer);
-        pmrem.compileEquirectangularShader();
-
-        // UI Elements
-        const aoIntSlider = document.getElementById('aoIntensity');
-        const aoIntVal = document.getElementById('aoIntVal');
-        const aoRadSlider = document.getElementById('aoRadius');
-        const aoRadVal = document.getElementById('aoRadVal');
-        const aoBiasSlider = document.getElementById('aoBias');
-        const aoBiasVal = document.getElementById('aoBiasVal');
-        const aoToggleBtn = document.getElementById('toggleAO');
-
-        function updateAO() {
-            if (ssaoEnabled) {
-                ssaoPass.intensity = parseFloat(aoIntSlider.value);
-                ssaoPass.radius = parseFloat(aoRadSlider.value);
-                ssaoPass.bias = parseFloat(aoBiasSlider.value);
-                aoIntVal.innerText = ssaoPass.intensity;
-                aoRadVal.innerText = ssaoPass.radius;
-                aoBiasVal.innerText = ssaoPass.bias;
-            }
-        }
-        aoIntSlider.addEventListener('input', updateAO);
-        aoRadSlider.addEventListener('input', updateAO);
-        aoBiasSlider.addEventListener('input', updateAO);
-        aoToggleBtn.addEventListener('click', () => {
-            ssaoEnabled = !ssaoEnabled;
-            if (ssaoEnabled) {
-                if (composer.passes.indexOf(ssaoPass) === -1) composer.addPass(ssaoPass);
-                ssaoPass.intensity = parseFloat(aoIntSlider.value);
-                aoToggleBtn.textContent = '🔘 Disattiva AO';
-                updateAO();
-            } else {
-                const idx = composer.passes.indexOf(ssaoPass);
-                if (idx !== -1) composer.removePass(ssaoPass);
-                aoToggleBtn.textContent = '🔘 Attiva AO';
-            }
+          }
         });
-        aoIntSlider.value = '0';
-        aoIntVal.innerText = '0';
-        aoToggleBtn.textContent = '🔘 Attiva AO';
 
-        function applyEnvToModel() {
-            if (!modelRoot || !currentEnv) return;
-            let count = 0;
-            modelRoot.traverse(child => {
-                if (child.isMesh && child.material) {
-                    const mats = Array.isArray(child.material) ? child.material : [child.material];
-                    mats.forEach(mat => { mat.envMap = currentEnv; mat.needsUpdate = true; count++; });
-                }
-            });
-            document.getElementById('status').innerText = `✅ ${count} materiali illuminati`;
+        let uniq = uniqueSorted(times);
+
+        if (uniq.length >= 2) {
+          return uniq;
         }
-        function setEnv(texture) {
+
+        // fallback 30fps se il clip non espone keyframe utili
+        const fps = 30;
+        const step = 1 / fps;
+        const generated = [];
+        for (let t = 0; t <= clip.duration + 1e-6; t += step) {
+          generated.push(+t.toFixed(6));
+        }
+        if (generated[generated.length - 1] !== +clip.duration.toFixed(6)) {
+          generated.push(+clip.duration.toFixed(6));
+        }
+        return uniqueSorted(generated);
+      }
+
+      const scene = new THREE.Scene();
+
+      const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: false
+      });
+      renderer.setPixelRatio(window.devicePixelRatio || 1);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.0;
+      document.body.appendChild(renderer.domElement);
+
+      // Camera che renderizziamo davvero: viene inizializzata dalla camera del GLB se esiste.
+      const renderCamera = new THREE.PerspectiveCamera(
+        45,
+        window.innerWidth / window.innerHeight,
+        0.01,
+        10000
+      );
+      renderCamera.position.set(0, 0, 5);
+
+      scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+      const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+      dir.position.set(5, 10, 7);
+      scene.add(dir);
+
+      const pmremGenerator = new THREE.PMREMGenerator(renderer);
+      pmremGenerator.compileEquirectangularShader();
+
+      function loadEnvironment() {
+        const jpgLoader = new THREE.TextureLoader();
+        jpgLoader.load(
+          './environment.jpg',
+          function (texture) {
             texture.mapping = THREE.EquirectangularReflectionMapping;
-            const env = pmrem.fromEquirectangular(texture).texture;
-            scene.environment = env;
-            scene.background = env;
-            currentEnv = env;
-            texture.dispose();
-            if (modelRoot) applyEnvToModel();
-            else document.getElementById('status').innerText = '✅ JPG pronto, attendi GLB';
+            const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+            scene.environment = envMap;
+            scene.background = texture;
+            setStatus('Environment JPG caricato');
+          },
+          undefined,
+          function () {
+            const hdrLoader = new THREE.RGBELoader();
+            hdrLoader.load(
+              './environment.hdr',
+              function (hdrTexture) {
+                hdrTexture.mapping = THREE.EquirectangularReflectionMapping;
+                const envMap = pmremGenerator.fromEquirectangular(hdrTexture).texture;
+                scene.environment = envMap;
+                scene.background = hdrTexture;
+                setStatus('Environment HDR caricato');
+              },
+              undefined,
+              function () {
+                scene.background = new THREE.Color(0x000000);
+                setStatus('Nessun environment trovato');
+              }
+            );
+          }
+        );
+      }
+
+      loadEnvironment();
+
+      const loader = new THREE.GLTFLoader();
+
+      let gltfRoot = null;
+      let mixer = null;
+      let clipDuration = 0;
+      let frameTimes = [];
+      let currentFrameIndex = 0;
+      let currentTime = 0;
+      let targetTime = 0;
+      let animatedCamera = null;
+
+      let baseCameraFov = renderCamera.fov;
+      let baseCameraNear = renderCamera.near;
+      let baseCameraFar = renderCamera.far;
+
+      function findCamera(root) {
+        let found = null;
+        root.traverse((obj) => {
+          if (found) return;
+          const name = (obj.name || '').toLowerCase();
+          if (obj.isCamera || obj.type === 'PerspectiveCamera' || obj.type === 'OrthographicCamera' || name.includes('camera')) {
+            found = obj;
+          }
+        });
+        return found;
+      }
+
+      function updateRenderCameraFromGLB() {
+        if (!animatedCamera) return;
+
+        animatedCamera.updateMatrixWorld(true);
+
+        const pos = new THREE.Vector3();
+        const quat = new THREE.Quaternion();
+
+        animatedCamera.getWorldPosition(pos);
+        animatedCamera.getWorldQuaternion(quat);
+
+        renderCamera.position.copy(pos);
+        renderCamera.quaternion.copy(quat);
+        renderCamera.fov = animatedCamera.fov || baseCameraFov;
+        renderCamera.near = animatedCamera.near || baseCameraNear;
+        renderCamera.far = animatedCamera.far || baseCameraFar;
+        renderCamera.zoom = animatedCamera.zoom || 1;
+        renderCamera.aspect = window.innerWidth / window.innerHeight;
+        renderCamera.updateProjectionMatrix();
+
+        baseCameraFov = renderCamera.fov;
+        baseCameraNear = renderCamera.near;
+        baseCameraFar = renderCamera.far;
+      }
+
+      function applyTime(time) {
+        if (!mixer) return;
+
+        // Forza il mixer sul tempo scelto dallo scroll.
+        currentTime = clamp(time, 0, clipDuration || time);
+        mixer.setTime(currentTime);
+
+        // alcune scene/rig richiedono un secondo update per propagare correttamente le matrici
+        mixer.update(0);
+        if (gltfRoot) gltfRoot.updateMatrixWorld(true);
+
+        if (animatedCamera) {
+          updateRenderCameraFromGLB();
         }
-        function loadJPG(file) {
-            const reader = new FileReader();
-            reader.onload = e => {
-                const img = new Image();
-                img.onload = () => {
-                    const tex = new THREE.Texture(img);
-                    tex.needsUpdate = true;
-                    setEnv(tex);
-                };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
-        function loadGLB(file) {
-            const reader = new FileReader();
-            reader.onload = e => {
-                const loader = new GLTFLoader();
-                loader.parse(e.target.result, '', gltf => {
-                    if (modelRoot) scene.remove(modelRoot);
-                    if (mixer) mixer.stopAllAction();
-                    modelRoot = gltf.scene;
-                    scene.add(modelRoot);
-                    const clips = gltf.animations;
-                    if (clips.length) {
-                        mixer = new THREE.AnimationMixer(modelRoot);
-                        let max = 0;
-                        clips.forEach(c => {
-                            const a = mixer.clipAction(c);
-                            a.loop = THREE.LoopOnce;
-                            a.clampWhenFinished = true;
-                            a.play();
-                            max = Math.max(max, c.duration);
-                        });
-                        totalDuration = max;
-                        currentTime = 0;
-                        mixer.setTime(0);
-                    }
-                    animatedCamera = null;
-                    modelRoot.traverse(n => { if (n.name === "Camera") animatedCamera = n; });
-                    if (!animatedCamera) modelRoot.traverse(n => { if (n.isCamera) animatedCamera = n; });
-                    if (animatedCamera) syncCamera();
-                    if (currentEnv) applyEnvToModel();
-                    else document.getElementById('status').innerText = '✅ Modello caricato, carica JPG';
-                });
-            };
-            reader.readAsArrayBuffer(file);
-        }
-        function syncCamera() {
-            if (!animatedCamera) return;
-            const pos = animatedCamera.getWorldPosition(new THREE.Vector3());
-            const quat = animatedCamera.getWorldQuaternion(new THREE.Quaternion());
-            activeCamera.position.copy(pos);
-            activeCamera.quaternion.copy(quat);
-            if (animatedCamera.isCamera && animatedCamera.fov) {
-                activeCamera.fov = animatedCamera.fov;
-                activeCamera.updateProjectionMatrix();
+      }
+
+      function setFrameIndex(nextIndex) {
+        if (!frameTimes.length) return;
+        currentFrameIndex = clamp(nextIndex, 0, frameTimes.length - 1);
+        targetTime = frameTimes[currentFrameIndex];
+        applyTime(targetTime);
+        setStatus(
+          'Frame ' + (currentFrameIndex + 1) + ' / ' + frameTimes.length +
+          '\nTime: ' + currentTime.toFixed(4) + 's'
+        );
+      }
+
+      function stepFrame(direction) {
+        if (!mixer || !frameTimes.length) return;
+        setFrameIndex(currentFrameIndex + direction);
+      }
+
+      loader.load(
+        './invito.glb',
+        function (gltf) {
+          if (gltfRoot) scene.remove(gltfRoot);
+
+          gltfRoot = gltf.scene;
+          scene.add(gltfRoot);
+
+          gltfRoot.traverse((obj) => {
+            if (obj.isMesh) {
+              obj.frustumCulled = false;
+              obj.castShadow = true;
+              obj.receiveShadow = true;
+              if (obj.material) obj.material.needsUpdate = true;
             }
-        }
-        function setTime(t) {
-            if (!mixer || totalDuration <= 0) return;
-            t = Math.min(totalDuration, Math.max(0, t));
-            currentTime = t;
-            mixer.setTime(currentTime);
-            mixer.update(0);
-        }
+          });
 
-        // Touch scroll con sensibilità migliorata
-        let touchStartY = 0;
-        let lastTime = currentTime;
-        let isDragging = false;
-        const sensitivity = 0.002; // secondi per pixel
-        function handleTouchStart(e) {
-            e.preventDefault();
-            touchStartY = e.touches[0].clientY;
-            isDragging = true;
-            lastTime = currentTime;
-        }
-        function handleTouchMove(e) {
-            if (!isDragging || !mixer || totalDuration <= 0) return;
-            e.preventDefault();
-            const deltaY = e.touches[0].clientY - touchStartY;
-            const deltaTime = deltaY * sensitivity;
-            let newTime = lastTime - deltaTime;
-            newTime = Math.min(totalDuration, Math.max(0, newTime));
-            if (Math.abs(newTime - currentTime) > 0.01) {
-                setTime(newTime);
-                syncCamera();
-                document.getElementById('status').innerText = `⏱️ ${currentTime.toFixed(2)}s / ${totalDuration.toFixed(2)}s`;
-            }
-        }
-        function handleTouchEnd(e) { e.preventDefault(); isDragging = false; }
+          animatedCamera = findCamera(gltfRoot);
 
-        const canvas = renderer.domElement;
-        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-        canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-        canvas.addEventListener('touchend', handleTouchEnd);
-        canvas.addEventListener('touchcancel', handleTouchEnd);
-        window.addEventListener('wheel', e => {
-            if (!mixer || totalDuration <= 0) return;
-            const step = e.deltaY > 0 ? 0.05 : -0.05;
-            let nt = currentTime + step;
-            nt = Math.min(totalDuration, Math.max(0, nt));
-            if (nt !== currentTime) {
-                setTime(nt);
-                syncCamera();
-                document.getElementById('status').innerText = `⏱️ ${currentTime.toFixed(2)}s / ${totalDuration.toFixed(2)}s`;
-            }
-            e.preventDefault();
-        }, { passive: false });
+          if (animatedCamera) {
+            updateRenderCameraFromGLB();
+          }
 
-        document.getElementById('resetCam').onclick = () => {
-            if (animatedCamera) syncCamera();
-            else { activeCamera.position.set(3, 2, 5); activeCamera.lookAt(0, 0, 0); }
-        };
-        document.getElementById('glbInput').onchange = e => e.target.files[0] && loadGLB(e.target.files[0]);
-        document.getElementById('jpgInput').onchange = e => e.target.files[0] && loadJPG(e.target.files[0]);
-        window.ondragover = e => e.preventDefault();
-        window.ondrop = e => {
-            e.preventDefault();
-            const f = e.dataTransfer.files[0];
-            if (f.name.endsWith('.glb')) loadGLB(f);
-            if (f.name.endsWith('.jpg') || f.name.endsWith('.jpeg')) loadJPG(f);
-        };
+          if (gltf.animations && gltf.animations.length) {
+            mixer = new THREE.AnimationMixer(gltfRoot);
 
-        // Toggle UI
-        const toggleBtn = document.getElementById('toggleUI');
-        const uiElements = document.querySelectorAll('.ui');
-        let uiVisible = false;
-        toggleBtn.addEventListener('click', () => {
-            uiVisible = !uiVisible;
-            uiElements.forEach(el => {
-                if (uiVisible) el.classList.remove('hidden-ui');
-                else el.classList.add('hidden-ui');
+            // Usa tutte le clip, senza pausa, così mixer.setTime() le forza correttamente.
+            gltf.animations.forEach((clip) => {
+              const action = mixer.clipAction(clip);
+              action.enabled = true;
+              action.paused = false;
+              action.clampWhenFinished = true;
+              action.loop = THREE.LoopOnce;
+              action.play();
             });
-            toggleBtn.textContent = uiVisible ? '🔘 Nascondi UI' : '🔘 Mostra UI';
-        });
 
-        // Altri controlli UI
-        const expSlider = document.getElementById('exposure');
-        const expVal = document.getElementById('expVal');
-        expSlider.addEventListener('input', () => { let v = parseFloat(expSlider.value); expVal.innerText = v; renderer.toneMappingExposure = v; });
-        const conSlider = document.getElementById('contrast');
-        const conVal = document.getElementById('conVal');
-        conSlider.addEventListener('input', () => { let v = parseFloat(conSlider.value); conVal.innerText = v; colorPass.uniforms.contrast.value = v; });
-        const satSlider = document.getElementById('saturation');
-        const satVal = document.getElementById('satVal');
-        satSlider.addEventListener('input', () => { let v = parseFloat(satSlider.value); satVal.innerText = v; colorPass.uniforms.saturation.value = v; });
-        const toneBoostSlider = document.getElementById('toneBoost');
-        const toneBoostVal = document.getElementById('toneBoostVal');
-        toneBoostSlider.addEventListener('input', () => { let v = parseFloat(toneBoostSlider.value); toneBoostVal.innerText = v; colorPass.uniforms.toneBoost.value = v; });
-        const colorSpaceSelect = document.getElementById('colorSpaceSelect');
-        colorSpaceSelect.addEventListener('change', () => { renderer.outputColorSpace = THREE[colorSpaceSelect.value]; });
-        const toneMappingSelect = document.getElementById('toneMappingSelect');
-        toneMappingSelect.addEventListener('change', () => { renderer.toneMapping = THREE[toneMappingSelect.value]; });
+            // scegli la clip più lunga come riferimento per i frame
+            const refClip = gltf.animations.reduce(
+              (a, b) => (b.duration > a.duration ? b : a),
+              gltf.animations[0]
+            );
 
-        const grainIntSlider = document.getElementById('grainIntensity');
-        const grainIntVal = document.getElementById('grainIntVal');
-        const grainSpeedSlider = document.getElementById('grainSpeed');
-        const grainSpeedVal = document.getElementById('grainSpeedVal');
-        const grainSizeSlider = document.getElementById('grainSize');
-        const grainSizeVal = document.getElementById('grainSizeVal');
-        const grainRoughSlider = document.getElementById('grainRoughness');
-        const grainRoughVal = document.getElementById('grainRoughVal');
-        grainIntSlider.addEventListener('input', () => { let v = parseFloat(grainIntSlider.value); grainIntVal.innerText = v.toFixed(3); grainPass.uniforms.intensity.value = v; });
-        grainSpeedSlider.addEventListener('input', () => { let v = parseFloat(grainSpeedSlider.value); grainSpeedVal.innerText = v; grainPass.uniforms.speed.value = v; });
-        grainSizeSlider.addEventListener('input', () => { let v = parseFloat(grainSizeSlider.value); grainSizeVal.innerText = v; grainPass.uniforms.size.value = v; });
-        grainRoughSlider.addEventListener('input', () => { let v = parseFloat(grainRoughSlider.value); grainRoughVal.innerText = v; grainPass.uniforms.roughness.value = v; });
-        let grainTime = 0;
-        function animateGrain() { grainTime += 0.02; grainPass.uniforms.time.value = grainTime; requestAnimationFrame(animateGrain); }
-        animateGrain();
+            clipDuration = refClip.duration;
+            frameTimes = collectFrameTimesFromClip(refClip);
 
-        const vigIntSlider = document.getElementById('vignetteIntensity');
-        const vigIntVal = document.getElementById('vigIntVal');
-        const vigRadSlider = document.getElementById('vignetteRadius');
-        const vigRadVal = document.getElementById('vigRadVal');
-        vigIntSlider.addEventListener('input', () => { let v = parseFloat(vigIntSlider.value); vigIntVal.innerText = v.toFixed(2); vignettePass.uniforms.intensity.value = v; });
-        vigRadSlider.addEventListener('input', () => { let v = parseFloat(vigRadSlider.value); vigRadVal.innerText = v.toFixed(2); vignettePass.uniforms.radius.value = v; });
+            currentFrameIndex = 0;
+            currentTime = frameTimes[0] || 0;
+            targetTime = currentTime;
 
-        document.getElementById('resetEffects').addEventListener('click', () => {
-            expSlider.value = '1.8'; expSlider.dispatchEvent(new Event('input'));
-            conSlider.value = '1.0'; conSlider.dispatchEvent(new Event('input'));
-            satSlider.value = '1.0'; satSlider.dispatchEvent(new Event('input'));
-            toneBoostSlider.value = '0.0'; toneBoostSlider.dispatchEvent(new Event('input'));
-            colorSpaceSelect.value = 'SRGBColorSpace'; colorSpaceSelect.dispatchEvent(new Event('change'));
-            toneMappingSelect.value = 'ACESFilmicToneMapping'; toneMappingSelect.dispatchEvent(new Event('change'));
-            grainIntSlider.value = '0'; grainIntSlider.dispatchEvent(new Event('input'));
-            grainSpeedSlider.value = '1.0'; grainSpeedSlider.dispatchEvent(new Event('input'));
-            grainSizeSlider.value = '2500'; grainSizeSlider.dispatchEvent(new Event('input'));
-            grainRoughSlider.value = '0.3'; grainRoughSlider.dispatchEvent(new Event('input'));
-            vigIntSlider.value = '0'; vigIntSlider.dispatchEvent(new Event('input'));
-            vigRadSlider.value = '0.8'; vigRadSlider.dispatchEvent(new Event('input'));
-            aoIntSlider.value = '0'; aoIntSlider.dispatchEvent(new Event('input'));
-            aoRadSlider.value = '0.5'; aoRadSlider.dispatchEvent(new Event('input'));
-            aoBiasSlider.value = '0.05'; aoBiasSlider.dispatchEvent(new Event('input'));
-            updateAO();
-            if (ssaoEnabled) { aoToggleBtn.click(); }
-        });
+            applyTime(currentTime);
 
-        async function autoLoad() {
-            const statusDiv = document.getElementById('status');
-            try {
-                const jpgResp = await fetch('./environment.jpg');
-                if (jpgResp.ok) {
-                    const blob = await jpgResp.blob();
-                    loadJPG(new File([blob], 'environment.jpg', { type: 'image/jpeg' }));
-                } else statusDiv.innerText = '⚠️ environment.jpg non trovato (404). Caricalo manualmente.';
-            } catch(e) { console.error(e); statusDiv.innerText = '⚠️ Errore caricamento environment.jpg'; }
-            try {
-                const glbResp = await fetch('./invito.glb');
-                if (glbResp.ok) {
-                    const blob = await glbResp.blob();
-                    loadGLB(new File([blob], 'invito.glb', { type: 'model/gltf-binary' }));
-                } else statusDiv.innerText += ' invito.glb non trovato (404).';
-            } catch(e) { console.error(e); statusDiv.innerText += ' Errore caricamento invito.glb'; }
+            setStatus(
+              (animatedCamera ? 'Camera trovata\n' : 'Camera non trovata\n') +
+              'Clip: ' + gltf.animations.length + '\n' +
+              'Frame disponibili: ' + frameTimes.length + '\n' +
+              'Time: ' + currentTime.toFixed(4) + 's'
+            );
+          } else {
+            mixer = null;
+            clipDuration = 0;
+            frameTimes = [];
+            currentFrameIndex = 0;
+            currentTime = 0;
+            targetTime = 0;
+            setStatus(
+              (animatedCamera ? 'Camera trovata\n' : 'Camera non trovata\n') +
+              'Nessuna animazione nel GLB'
+            );
+          }
+        },
+        function (xhr) {
+          if (xhr.total) {
+            const pct = Math.round((xhr.loaded / xhr.total) * 100);
+            setStatus('Caricamento GLB: ' + pct + '%');
+          }
+        },
+        function (err) {
+          console.error(err);
+          setStatus('Errore caricamento GLB');
         }
-        autoLoad();
+      );
 
-        function animate() {
-            requestAnimationFrame(animate);
-            if (mixer) mixer.update(0);
-            if (animatedCamera) syncCamera();
-            composer.render();
+      // Scroll: un evento = un frame
+      window.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        if (!mixer || !frameTimes.length) return;
+        const dir = e.deltaY > 0 ? 1 : -1;
+        stepFrame(dir);
+      }, { passive: false });
+
+      // Touch: quando superi una piccola soglia, passi al frame dopo/prima
+      let lastTouchY = 0;
+      let touchAccumulator = 0;
+
+      window.addEventListener('touchstart', (e) => {
+        if (!e.touches.length) return;
+        lastTouchY = e.touches[0].clientY;
+        touchAccumulator = 0;
+      }, { passive: false });
+
+      window.addEventListener('touchmove', (e) => {
+        if (!e.touches.length) return;
+        e.preventDefault();
+
+        const y = e.touches[0].clientY;
+        const delta = lastTouchY - y;
+        lastTouchY = y;
+        touchAccumulator += delta;
+
+        const threshold = 14;
+        if (Math.abs(touchAccumulator) >= threshold) {
+          const steps = Math.trunc(touchAccumulator / threshold);
+          touchAccumulator -= steps * threshold;
+
+          if (steps > 0) {
+            for (let i = 0; i < steps; i++) stepFrame(1);
+          } else if (steps < 0) {
+            for (let i = 0; i < Math.abs(steps); i++) stepFrame(-1);
+          }
         }
-        animate();
-        window.onresize = () => {
-            activeCamera.aspect = window.innerWidth / window.innerHeight;
-            activeCamera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            composer.setSize(window.innerWidth, window.innerHeight);
-            ssaoPass.setSize(window.innerWidth, window.innerHeight);
-        };
-    </script>
+      }, { passive: false });
+
+      window.addEventListener('resize', () => {
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderCamera.aspect = window.innerWidth / window.innerHeight;
+        renderCamera.updateProjectionMatrix();
+      });
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        if (mixer && frameTimes.length) {
+          // tieni la scena esattamente sul frame scelto
+          if (currentTime !== targetTime) {
+            applyTime(targetTime);
+          } else if (animatedCamera) {
+            updateRenderCameraFromGLB();
+          }
+        }
+
+        renderer.render(scene, renderCamera);
+      }
+
+      animate();
+    })();
+  </script>
 </body>
 </html>
