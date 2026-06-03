@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>GLB Frame Scrubber</title>
+<title>GLB Frame Scrubber + Bollicine + Reset fluido frame 55 + UI toggle (U)</title>
 
 <style>
   html, body {
@@ -12,397 +12,933 @@
     height: 100%;
     overflow: hidden;
     background: #000;
-    font-family: Arial, Helvetica, sans-serif;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     touch-action: none;
   }
 
-  canvas { display: block; }
-
-  #hint {
+  /* SFONDO IMMAGINE (sempre visibile) */
+  #background-container {
     position: fixed;
-    left: 16px;
-    top: 16px;
-    z-index: 20;
-    color: #fff;
-    background: rgba(0,0,0,0.5);
-    padding: 10px 12px;
-    border-radius: 10px;
-    font-size: 12px;
-    line-height: 1.45;
-    pointer-events: none;
-    max-width: min(460px, calc(100vw - 32px));
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    overflow: hidden;
+    background-color: #000;
+  }
+  #background-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
   }
 
+  canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    z-index: 1;
+  }
+
+  /* Tutti gli elementi UI (che possono essere nascosti) */
+  .ui-elements {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 20;
+  }
+  .ui-elements > * {
+    pointer-events: auto;
+  }
+
+  #toggleUI {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    background: rgba(30,30,40,0.9);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    width: 48px;
+    height: 48px;
+    border-radius: 40px;
+    cursor: pointer;
+    text-align: center;
+    line-height: 48px;
+    user-select: none;
+    touch-action: manipulation;
+  }
+  #toggleUI:active { transform: scale(0.94); background: rgba(50,50,70,0.9); }
+
+  .ui-panel {
+    position: fixed;
+    bottom: 80px;
+    left: 20px;
+    right: 20px;
+    max-width: 420px;
+    background: rgba(20,20,28,0.94);
+    backdrop-filter: blur(16px);
+    border-radius: 24px;
+    padding: 16px 18px;
+    color: #f0f0f0;
+    font-size: 14px;
+    border: 1px solid rgba(255,255,255,0.25);
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  .ui-panel label {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 12px;
+    margin-bottom: 6px;
+  }
+  .ui-panel input {
+    width: 100%;
+    cursor: pointer;
+    background: #2c2c38;
+    height: 4px;
+    border-radius: 4px;
+  }
+  .ui-panel .row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .ui-panel button {
+    background: #3a3a4a;
+    border: none;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 40px;
+    font-size: 12px;
+    cursor: pointer;
+    flex: 1;
+    transition: 0.1s;
+  }
+  .ui-panel button:active { background: #5a5a7a; transform: scale(0.96); }
+  .file-input-label {
+    background: #2a6f5c;
+    text-align: center;
+    padding: 8px 0;
+    border-radius: 40px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-top: 8px;
+    display: block;
+  }
+  hr { border-color: #444; margin: 12px 0; }
+  .value-display { font-family: monospace; background: #00000066; padding: 2px 8px; border-radius: 20px; font-size: 12px; }
   #status {
     position: fixed;
     right: 16px;
     bottom: 16px;
-    z-index: 20;
-    color: #d9ffd9;
     background: rgba(0,0,0,0.72);
-    border: 1px solid rgba(255,255,255,0.12);
-    padding: 10px 12px;
-    border-radius: 10px;
-    font-size: 12px;
-    line-height: 1.35;
-    max-width: min(420px, calc(100vw - 32px));
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    color: #d9ffd9;
     pointer-events: none;
     white-space: pre-line;
   }
+  #hint {
+    position: fixed;
+    left: 16px;
+    top: 16px;
+    background: rgba(0,0,0,0.5);
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    color: white;
+    pointer-events: none;
+  }
+  @media (max-width: 600px) {
+    .ui-panel { max-width: 280px; padding: 12px 14px; }
+    #toggleUI { width: 42px; height: 42px; line-height: 42px; font-size: 22px; bottom: 16px; left: 16px; }
+  }
 </style>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
-</head>
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
+    }
+  }
+</script>
 
-<body>
-  <div id="hint">Scroll / swipe verticale: un frame per scatto.<br>Nessun mouse orbit, solo scrubbing della timeline.</div>
-  <div id="status">Inizializzazione...</div>
+<script type="module">
+  import * as THREE from 'three';
+  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+  import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+  import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+  import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+  
+  (function () {
+    const statusEl = document.getElementById('status');
+    function setStatus(msg) { if(statusEl) statusEl.textContent = msg; }
 
-  <script>
-    (function () {
-      const statusEl = document.getElementById('status');
+    // UI elements
+    const uiElements = document.querySelector('.ui-elements');
+    const exposureSlider = document.getElementById('exposure');
+    const exposureVal = document.getElementById('exposureVal');
+    const bloomToggle = document.getElementById('bloomToggle');
+    const bloomIntensity = document.getElementById('bloomIntensity');
+    const bloomVal = document.getElementById('bloomVal');
+    const rotSlider = document.getElementById('hdrRotate');
+    const rotVal = document.getElementById('rotVal');
+    const loadHdrBtn = document.getElementById('loadHdrFile');
+    const loadBackgroundBtn = document.getElementById('loadBackgroundBtn');
+    const resetBackgroundBtn = document.getElementById('resetBackgroundBtn');
 
-      function setStatus(msg) {
-        statusEl.textContent = msg;
-      }
+    // Particelle controls
+    const particleCountSlider = document.getElementById('particleCount');
+    const particleCountVal = document.getElementById('particleCountVal');
+    const particleSizeSlider = document.getElementById('particleSize');
+    const particleSizeVal = document.getElementById('particleSizeVal');
+    const particleSpeedSlider = document.getElementById('particleSpeed');
+    const particleSpeedVal = document.getElementById('particleSpeedVal');
+    const particleRandomnessSlider = document.getElementById('particleRandomness');
+    const particleRandomnessVal = document.getElementById('particleRandomnessVal');
+    const particleOpacitySlider = document.getElementById('particleOpacity');
+    const particleOpacityVal = document.getElementById('particleOpacityVal');
+    const particleColorPicker = document.getElementById('particleColor');
+    const particleColorVal = document.getElementById('particleColorVal');
+    const particleToggle = document.getElementById('particleToggle');
 
-      function clamp(v, min, max) {
-        return Math.max(min, Math.min(max, v));
-      }
+    // Rotazione armonica
+    const rotXSpeed = document.getElementById('rotXSpeed');
+    const rotXSpeedVal = document.getElementById('rotXSpeedVal');
+    const rotXAmpl = document.getElementById('rotXAmpl');
+    const rotXAmplVal = document.getElementById('rotXAmplVal');
+    const rotYSpeed = document.getElementById('rotYSpeed');
+    const rotYSpeedVal = document.getElementById('rotYSpeedVal');
+    const rotYAmpl = document.getElementById('rotYAmpl');
+    const rotYAmplVal = document.getElementById('rotYAmplVal');
+    const rotZSpeed = document.getElementById('rotZSpeed');
+    const rotZSpeedVal = document.getElementById('rotZSpeedVal');
+    const rotZAmpl = document.getElementById('rotZAmpl');
+    const rotZAmplVal = document.getElementById('rotZAmplVal');
+    const rotMasterToggle = document.getElementById('rotMasterToggle');
 
-      function uniqueSorted(values) {
-        const filtered = values.filter((v) => Number.isFinite(v));
-        const uniq = Array.from(new Set(filtered.map((v) => +v.toFixed(6))));
-        uniq.sort((a, b) => a - b);
-        return uniq;
-      }
-
-      function collectFrameTimesFromClip(clip) {
-        const times = [];
-
-        clip.tracks.forEach((track) => {
-          if (track && track.times && track.times.length) {
-            for (let i = 0; i < track.times.length; i++) {
-              times.push(track.times[i]);
-            }
-          }
-        });
-
-        let uniq = uniqueSorted(times);
-
-        if (uniq.length >= 2) {
-          return uniq;
-        }
-
-        // fallback 30fps se il clip non espone keyframe utili
-        const fps = 30;
-        const step = 1 / fps;
-        const generated = [];
-        for (let t = 0; t <= clip.duration + 1e-6; t += step) {
-          generated.push(+t.toFixed(6));
-        }
-        if (generated[generated.length - 1] !== +clip.duration.toFixed(6)) {
-          generated.push(+clip.duration.toFixed(6));
-        }
-        return uniqueSorted(generated);
-      }
-
-      const scene = new THREE.Scene();
-
-      const renderer = new THREE.WebGLRenderer({
-        antialias: true,
-        alpha: false
-      });
-      renderer.setPixelRatio(window.devicePixelRatio || 1);
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.outputEncoding = THREE.sRGBEncoding;
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.0;
-      document.body.appendChild(renderer.domElement);
-
-      // Camera che renderizziamo davvero: viene inizializzata dalla camera del GLB se esiste.
-      const renderCamera = new THREE.PerspectiveCamera(
-        45,
-        window.innerWidth / window.innerHeight,
-        0.01,
-        10000
-      );
-      renderCamera.position.set(0, 0, 5);
-
-      scene.add(new THREE.AmbientLight(0xffffff, 1.2));
-      const dir = new THREE.DirectionalLight(0xffffff, 1.0);
-      dir.position.set(5, 10, 7);
-      scene.add(dir);
-
-      const pmremGenerator = new THREE.PMREMGenerator(renderer);
-      pmremGenerator.compileEquirectangularShader();
-
-      function loadEnvironment() {
+    let currentEnvTexture = null;
+    let composer = null;
+    let bloomPass = null;
+    let bloomEnabled = false;
+    
+    let particleSystem = null;
+    let particleGeometry = null;
+    let particleMaterial = null;
+    let particlePositions = [];
+    let particleVelocities = [];
+    let particleCount = 1500;
+    let particleEnabled = true;
+    
+    // Rotazione armonica con reset fluido
+    let armatureObj = null;
+    let rotClock = 0;
+    let rotEnabled = true;
+    let resetting = false;
+    let resetFinished = false;
+    let currentResetRot = new THREE.Euler(0, 0, 0);
+    let targetResetRot = new THREE.Euler(0, 0, 0);
+    let resetLerpSpeed = 0.08;
+    
+    // Texture bollicina
+    function createGradientCircleTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const radius = canvas.width / 2;
+      const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
+      gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+      gradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.8)');
+      gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.3)');
+      gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.needsUpdate = true;
+      return texture;
+    }
+    
+    const gradientTexture = createGradientCircleTexture();
+    
+    // Sfondo immagine
+    const bgImage = document.getElementById('background-image');
+    function setBackgroundImage(url) {
+      bgImage.src = url;
+      bgImage.style.objectFit = "cover";
+      bgImage.style.width = "100%";
+      bgImage.style.height = "100%";
+      setStatus(`Sfondo immagine: ${url.split('/').pop()}`);
+    }
+    function resetBackgroundToDefault() {
+      const defaultUrl = './asset/background.png';
+      fetch(defaultUrl).then(resp => {
+        if (resp.ok) setBackgroundImage(defaultUrl);
+        else setBackgroundImage('');
+      }).catch(() => setBackgroundImage(''));
+    }
+    function loadDefaultBackground() {
+      const defaultUrl = './asset/background.png';
+      fetch(defaultUrl).then(resp => {
+        if (resp.ok) setBackgroundImage(defaultUrl);
+      }).catch(() => {});
+    }
+    loadBackgroundBtn.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/jpeg,image/png,image/webp';
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        setBackgroundImage(url);
+      };
+      input.click();
+    });
+    resetBackgroundBtn.addEventListener('click', () => {
+      resetBackgroundToDefault();
+    });
+    
+    // Setup Three.js trasparente
+    const scene = new THREE.Scene();
+    scene.background = null;
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x000000, 0);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+    
+    composer = new EffectComposer(renderer);
+    const renderPass = new RenderPass(scene, null);
+    composer.addPass(renderPass);
+    bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.0, 0.4, 0.85);
+    bloomPass.threshold = 0.1;
+    bloomPass.strength = 0.6;
+    bloomPass.radius = 0.5;
+    composer.addPass(bloomPass);
+    bloomPass.enabled = false;
+    
+    const renderCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 10000);
+    renderCamera.position.set(0, 0, 5);
+    
+    // HDR environment
+    const pmremGen = new THREE.PMREMGenerator(renderer);
+    pmremGen.compileEquirectangularShader();
+    
+    function applyEnvironmentTexture(texture, isHdr = false) {
+      if (!texture) return;
+      texture.mapping = THREE.EquirectangularReflectionMapping;
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      texture.offset.x = rotSlider ? parseFloat(rotSlider.value) : 0;
+      currentEnvTexture = texture;
+      const newEnvMap = pmremGen.fromEquirectangular(texture).texture;
+      scene.environment = newEnvMap;
+      setStatus(`Ambiente HDR caricato: ${isHdr ? 'HDR' : 'JPG'}`);
+    }
+    function loadInitialEnvironment() {
+      const hdrLoader = new RGBELoader();
+      hdrLoader.load('./environment.hdr', (texture) => {
+        applyEnvironmentTexture(texture, true);
+      }, undefined, () => {
         const jpgLoader = new THREE.TextureLoader();
-        jpgLoader.load(
-          './environment.jpg',
-          function (texture) {
-            texture.mapping = THREE.EquirectangularReflectionMapping;
-            const envMap = pmremGenerator.fromEquirectangular(texture).texture;
-            scene.environment = envMap;
-            scene.background = texture;
-            setStatus('Environment JPG caricato');
-          },
-          undefined,
-          function () {
-            const hdrLoader = new THREE.RGBELoader();
-            hdrLoader.load(
-              './environment.hdr',
-              function (hdrTexture) {
-                hdrTexture.mapping = THREE.EquirectangularReflectionMapping;
-                const envMap = pmremGenerator.fromEquirectangular(hdrTexture).texture;
-                scene.environment = envMap;
-                scene.background = hdrTexture;
-                setStatus('Environment HDR caricato');
-              },
-              undefined,
-              function () {
-                scene.background = new THREE.Color(0x000000);
-                setStatus('Nessun environment trovato');
-              }
-            );
-          }
-        );
+        jpgLoader.load('./environment.jpg', (texture) => {
+          applyEnvironmentTexture(texture, false);
+        }, undefined, () => {
+          scene.environment = null;
+          setStatus('Nessun ambiente HDR, illuminazione solo da luci GLB');
+        });
+      });
+    }
+    loadHdrBtn.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.hdr,.jpg,.jpeg,.png';
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        if (file.name.toLowerCase().endsWith('.hdr')) {
+          const hdrLoader = new RGBELoader();
+          hdrLoader.load(url, (texture) => {
+            applyEnvironmentTexture(texture, true);
+            URL.revokeObjectURL(url);
+          });
+        } else {
+          const imgLoader = new THREE.TextureLoader();
+          imgLoader.load(url, (texture) => {
+            applyEnvironmentTexture(texture, false);
+            URL.revokeObjectURL(url);
+          });
+        }
+      };
+      input.click();
+    });
+    function updateHdrRotation(value01) {
+      if (!currentEnvTexture) return;
+      currentEnvTexture.offset.x = value01;
+      currentEnvTexture.needsUpdate = true;
+      const newEnvMap = pmremGen.fromEquirectangular(currentEnvTexture).texture;
+      scene.environment = newEnvMap;
+    }
+    rotSlider.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      rotVal.textContent = val.toFixed(2);
+      updateHdrRotation(val);
+    });
+    exposureSlider.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      exposureVal.textContent = val.toFixed(2);
+      renderer.toneMappingExposure = val;
+    });
+    bloomToggle.addEventListener('click', () => {
+      bloomEnabled = !bloomEnabled;
+      bloomPass.enabled = bloomEnabled;
+      bloomToggle.textContent = bloomEnabled ? 'Bloom: ON' : 'Bloom: OFF';
+      bloomIntensity.disabled = !bloomEnabled;
+    });
+    bloomIntensity.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      bloomVal.textContent = val.toFixed(2);
+      if(bloomPass) bloomPass.strength = val;
+    });
+    bloomIntensity.disabled = true;
+    
+    // ---------- PARTICELLE A BOLLICINE ----------
+    function createParticles() {
+      if (particleSystem) {
+        scene.remove(particleSystem);
+        if (particleGeometry) particleGeometry.dispose();
+        if (particleMaterial) particleMaterial.dispose();
       }
-
-      loadEnvironment();
-
-      const loader = new THREE.GLTFLoader();
-
-      let gltfRoot = null;
-      let mixer = null;
-      let clipDuration = 0;
-      let frameTimes = [];
-      let currentFrameIndex = 0;
-      let currentTime = 0;
-      let targetTime = 0;
-      let animatedCamera = null;
-
-      let baseCameraFov = renderCamera.fov;
-      let baseCameraNear = renderCamera.near;
-      let baseCameraFar = renderCamera.far;
-
-      function findCamera(root) {
-        let found = null;
-        root.traverse((obj) => {
-          if (found) return;
-          const name = (obj.name || '').toLowerCase();
-          if (obj.isCamera || obj.type === 'PerspectiveCamera' || obj.type === 'OrthographicCamera' || name.includes('camera')) {
-            found = obj;
+      const count = Math.floor(parseFloat(particleCountSlider.value));
+      const size = parseFloat(particleSizeSlider.value);
+      const opacity = parseFloat(particleOpacitySlider.value);
+      const colorHex = particleColorPicker.value;
+      const color = new THREE.Color(colorHex);
+      
+      particleGeometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(count * 3);
+      particlePositions = [];
+      particleVelocities = [];
+      for (let i = 0; i < count; i++) {
+        const x = (Math.random() - 0.5) * 14;
+        const y = (Math.random() - 0.5) * 10;
+        const z = (Math.random() - 0.5) * 16 - 3;
+        positions[i*3] = x;
+        positions[i*3+1] = y;
+        positions[i*3+2] = z;
+        particlePositions.push(new THREE.Vector3(x, y, z));
+        particleVelocities.push(new THREE.Vector3(
+          (Math.random() - 0.5) * 0.01,
+          Math.random() * 0.02 + 0.01,
+          (Math.random() - 0.5) * 0.01
+        ));
+      }
+      particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      particleMaterial = new THREE.PointsMaterial({
+        color: color,
+        size: size,
+        map: gradientTexture,
+        transparent: true,
+        opacity: opacity,
+        blending: THREE.AdditiveBlending
+      });
+      particleSystem = new THREE.Points(particleGeometry, particleMaterial);
+      scene.add(particleSystem);
+      
+      particleCountVal.textContent = count;
+      particleSizeVal.textContent = size.toFixed(2);
+      particleOpacityVal.textContent = opacity.toFixed(2);
+      particleColorVal.textContent = colorHex.toUpperCase();
+    }
+    
+    function updateParticles() {
+      if (!particleSystem) return;
+      const positionsAttribute = particleGeometry.attributes.position;
+      const positionsArray = positionsAttribute.array;
+      const speed = parseFloat(particleSpeedSlider.value);
+      const randomness = parseFloat(particleRandomnessSlider.value);
+      const count = particlePositions.length;
+      
+      for (let i = 0; i < count; i++) {
+        if (randomness > 0) {
+          particleVelocities[i].x += (Math.random() - 0.5) * randomness * 0.008;
+          particleVelocities[i].z += (Math.random() - 0.5) * randomness * 0.008;
+          particleVelocities[i].y += (Math.random() - 0.5) * randomness * 0.005;
+          const maxVel = 0.035;
+          particleVelocities[i].x = Math.min(maxVel, Math.max(-maxVel, particleVelocities[i].x));
+          particleVelocities[i].y = Math.min(maxVel, Math.max(0.005, particleVelocities[i].y));
+          particleVelocities[i].z = Math.min(maxVel, Math.max(-maxVel, particleVelocities[i].z));
+        }
+        
+        const damping = 0.99;
+        particleVelocities[i].x *= damping;
+        particleVelocities[i].z *= damping;
+        particleVelocities[i].y *= 0.995;
+        
+        let newX = particlePositions[i].x + particleVelocities[i].x * speed;
+        let newY = particlePositions[i].y + particleVelocities[i].y * speed;
+        let newZ = particlePositions[i].z + particleVelocities[i].z * speed;
+        
+        const limitX = 8;
+        const limitY = 6;
+        const limitZ = 10;
+        if (Math.abs(newX) > limitX) {
+          newX = -Math.sign(newX) * limitX * 0.9;
+          particleVelocities[i].x *= -0.5;
+        }
+        if (newY > limitY) {
+          newY = -limitY + 1;
+          particleVelocities[i].y = 0.01;
+        }
+        if (newY < -limitY) {
+          newY = limitY - 1;
+          particleVelocities[i].y = 0.01;
+        }
+        if (Math.abs(newZ) > limitZ) {
+          newZ = -Math.sign(newZ) * limitZ * 0.9;
+          particleVelocities[i].z *= -0.5;
+        }
+        
+        particlePositions[i].set(newX, newY, newZ);
+        positionsArray[i*3] = newX;
+        positionsArray[i*3+1] = newY;
+        positionsArray[i*3+2] = newZ;
+      }
+      positionsAttribute.needsUpdate = true;
+    }
+    
+    function rebuildParticles() {
+      createParticles();
+    }
+    
+    // ---------- ROTAZIONE ARMONICA CON RESET AL FRAME 55 ----------
+    function updateArmatureRotation(deltaTime, currentFrame) {
+      if (!armatureObj) return;
+      
+      const resetFrame = 55;
+      const shouldReset = (currentFrame >= resetFrame) && !resetFinished && !resetting;
+      const shouldReactivate = (currentFrame < resetFrame) && resetFinished;
+      
+      if (shouldReset) {
+        resetting = true;
+        currentResetRot.x = armatureObj.rotation.x;
+        currentResetRot.y = armatureObj.rotation.y;
+        currentResetRot.z = armatureObj.rotation.z;
+        targetResetRot.set(0, 0, 0);
+      }
+      
+      if (shouldReactivate) {
+        resetFinished = false;
+        resetting = false;
+        rotClock = 0;
+      }
+      
+      if (resetting) {
+        currentResetRot.x += (targetResetRot.x - currentResetRot.x) * resetLerpSpeed;
+        currentResetRot.y += (targetResetRot.y - currentResetRot.y) * resetLerpSpeed;
+        currentResetRot.z += (targetResetRot.z - currentResetRot.z) * resetLerpSpeed;
+        armatureObj.rotation.x = currentResetRot.x;
+        armatureObj.rotation.y = currentResetRot.y;
+        armatureObj.rotation.z = currentResetRot.z;
+        if (Math.abs(currentResetRot.x) < 0.001 && Math.abs(currentResetRot.y) < 0.001 && Math.abs(currentResetRot.z) < 0.001) {
+          armatureObj.rotation.set(0, 0, 0);
+          resetting = false;
+          resetFinished = true;
+        }
+        return;
+      }
+      
+      if (resetFinished) return;
+      if (!rotMasterToggle.checked) {
+        armatureObj.rotation.x *= 0.98;
+        armatureObj.rotation.y *= 0.98;
+        armatureObj.rotation.z *= 0.98;
+        return;
+      }
+      
+      rotClock += deltaTime;
+      const speedX = parseFloat(rotXSpeed.value);
+      const amplX = parseFloat(rotXAmpl.value);
+      const speedY = parseFloat(rotYSpeed.value);
+      const amplY = parseFloat(rotYAmpl.value);
+      const speedZ = parseFloat(rotZSpeed.value);
+      const amplZ = parseFloat(rotZAmpl.value);
+      
+      armatureObj.rotation.x = Math.sin(rotClock * speedX) * amplX;
+      armatureObj.rotation.y = Math.sin(rotClock * speedY) * amplY;
+      armatureObj.rotation.z = Math.sin(rotClock * speedZ) * amplZ;
+    }
+    
+    // Eventi UI rotazione
+    rotXSpeed.addEventListener('input', () => { rotXSpeedVal.textContent = parseFloat(rotXSpeed.value).toFixed(2); });
+    rotXAmpl.addEventListener('input', () => { rotXAmplVal.textContent = parseFloat(rotXAmpl.value).toFixed(3); });
+    rotYSpeed.addEventListener('input', () => { rotYSpeedVal.textContent = parseFloat(rotYSpeed.value).toFixed(2); });
+    rotYAmpl.addEventListener('input', () => { rotYAmplVal.textContent = parseFloat(rotYAmpl.value).toFixed(3); });
+    rotZSpeed.addEventListener('input', () => { rotZSpeedVal.textContent = parseFloat(rotZSpeed.value).toFixed(2); });
+    rotZAmpl.addEventListener('input', () => { rotZAmplVal.textContent = parseFloat(rotZAmpl.value).toFixed(3); });
+    
+    // Valori rotazione
+    rotXSpeed.value = "0.65"; rotXSpeedVal.textContent = "0.65";
+    rotXAmpl.value = "0.028"; rotXAmplVal.textContent = "0.028";
+    rotYSpeed.value = "0.55"; rotYSpeedVal.textContent = "0.55";
+    rotYAmpl.value = "0.124"; rotYAmplVal.textContent = "0.124";
+    rotZSpeed.value = "0.55"; rotZSpeedVal.textContent = "0.55";
+    rotZAmpl.value = "0.121"; rotZAmplVal.textContent = "0.121";
+    rotMasterToggle.checked = true;
+    
+    // Valori particelle
+    particleCountSlider.value = "1500";
+    particleSizeSlider.value = "0.07";
+    particleSpeedSlider.value = "0.14";
+    particleRandomnessSlider.value = "0.60";
+    particleOpacitySlider.value = "0.57";
+    particleColorPicker.value = "#39FBFE";
+    particleToggle.textContent = '✨ Bollicine: ON';
+    particleEnabled = true;
+    
+    particleCountSlider.addEventListener('input', () => {
+      particleCountVal.textContent = particleCountSlider.value;
+      rebuildParticles();
+    });
+    particleSizeSlider.addEventListener('input', () => {
+      const val = parseFloat(particleSizeSlider.value);
+      particleSizeVal.textContent = val.toFixed(2);
+      if (particleMaterial) particleMaterial.size = val;
+    });
+    particleSpeedSlider.addEventListener('input', () => {
+      particleSpeedVal.textContent = parseFloat(particleSpeedSlider.value).toFixed(2);
+    });
+    particleRandomnessSlider.addEventListener('input', () => {
+      particleRandomnessVal.textContent = parseFloat(particleRandomnessSlider.value).toFixed(2);
+    });
+    particleOpacitySlider.addEventListener('input', () => {
+      const val = parseFloat(particleOpacitySlider.value);
+      particleOpacityVal.textContent = val.toFixed(2);
+      if (particleMaterial) particleMaterial.opacity = val;
+    });
+    particleColorPicker.addEventListener('input', () => {
+      const val = particleColorPicker.value;
+      particleColorVal.textContent = val.toUpperCase();
+      if (particleMaterial) particleMaterial.color.set(val);
+    });
+    particleToggle.addEventListener('click', () => {
+      particleEnabled = !particleEnabled;
+      if (particleSystem) particleSystem.visible = particleEnabled;
+      particleToggle.textContent = particleEnabled ? '✨ Bollicine: ON' : '✨ Bollicine: OFF';
+    });
+    
+    // ---------- GESTIONE UI: toggle con tasto U (senza nascondere lo sfondo) ----------
+    let uiVisible = false;
+    function toggleUI() {
+      uiVisible = !uiVisible;
+      uiElements.style.display = uiVisible ? 'block' : 'none';
+    }
+    // All'avvio, nascondi tutta l'UI (ma lo sfondo resta visibile)
+    uiElements.style.display = 'none';
+    
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'u' || e.key === 'U') {
+        e.preventDefault();
+        toggleUI();
+      }
+    });
+    
+    // ---------- GLB Loading ----------
+    const loader = new GLTFLoader();
+    let gltfRoot = null;
+    let mixer = null;
+    let clipDuration = 0;
+    let frameTimes = [];
+    let currentFrameIndex = 0;
+    let currentTime = 0;
+    let targetTime = 0;
+    let animatedCamera = null;
+    let baseCameraFov = renderCamera.fov, baseCameraNear = renderCamera.near, baseCameraFar = renderCamera.far;
+    
+    function findCamera(root) {
+      let found = null;
+      root.traverse((obj) => {
+        if (found) return;
+        if (obj.isCamera || obj.type === 'PerspectiveCamera' || obj.type === 'OrthographicCamera' || (obj.name && obj.name.toLowerCase().includes('camera'))) {
+          found = obj;
+        }
+      });
+      return found;
+    }
+    
+    function updateRenderCameraFromGLB() {
+      if (!animatedCamera) return;
+      animatedCamera.updateMatrixWorld(true);
+      const pos = new THREE.Vector3();
+      const quat = new THREE.Quaternion();
+      animatedCamera.getWorldPosition(pos);
+      animatedCamera.getWorldQuaternion(quat);
+      renderCamera.position.copy(pos);
+      renderCamera.quaternion.copy(quat);
+      renderCamera.fov = animatedCamera.fov || baseCameraFov;
+      renderCamera.near = animatedCamera.near || baseCameraNear;
+      renderCamera.far = animatedCamera.far || baseCameraFar;
+      renderCamera.zoom = animatedCamera.zoom || 1;
+      renderCamera.aspect = window.innerWidth / window.innerHeight;
+      renderCamera.updateProjectionMatrix();
+      baseCameraFov = renderCamera.fov;
+    }
+    
+    function applyTime(time) {
+      if (!mixer) return;
+      currentTime = Math.min(Math.max(time, 0), clipDuration || time);
+      mixer.setTime(currentTime);
+      mixer.update(0);
+      if (gltfRoot) gltfRoot.updateMatrixWorld(true);
+      if (animatedCamera) updateRenderCameraFromGLB();
+    }
+    
+    function setFrameIndex(nextIndex) {
+      if (!frameTimes.length) return;
+      currentFrameIndex = Math.min(Math.max(nextIndex, 0), frameTimes.length - 1);
+      targetTime = frameTimes[currentFrameIndex];
+      applyTime(targetTime);
+      setStatus(`Frame ${currentFrameIndex+1}/${frameTimes.length}\nTime: ${currentTime.toFixed(4)}s`);
+    }
+    
+    function stepFrame(direction) {
+      if (!mixer || !frameTimes.length) return;
+      setFrameIndex(currentFrameIndex + direction);
+    }
+    
+    function uniqueSorted(values) {
+      const filtered = values.filter(v => Number.isFinite(v));
+      const uniq = Array.from(new Set(filtered.map(v => +v.toFixed(6))));
+      uniq.sort((a,b)=>a-b);
+      return uniq;
+    }
+    
+    function collectFrameTimesFromClip(clip) {
+      const times = [];
+      clip.tracks.forEach(track => {
+        if(track && track.times) times.push(...track.times);
+      });
+      let uniq = uniqueSorted(times);
+      if(uniq.length >= 2) return uniq;
+      const fps = 30;
+      const step = 1/fps;
+      const generated = [];
+      for(let t=0; t<=clip.duration+1e-6; t+=step) generated.push(+t.toFixed(6));
+      if(generated[generated.length-1] !== +clip.duration.toFixed(6)) generated.push(+clip.duration.toFixed(6));
+      return uniqueSorted(generated);
+    }
+    
+    loader.load('./invito.glb', (gltf) => {
+      if(gltfRoot) scene.remove(gltfRoot);
+      gltfRoot = gltf.scene;
+      scene.add(gltfRoot);
+      
+      armatureObj = null;
+      gltfRoot.traverse(obj => {
+        if (obj.name && obj.name.toLowerCase() === "armature.001") {
+          armatureObj = obj;
+          console.log("✅ Trovata Armature.001");
+        }
+      });
+      if (!armatureObj) {
+        gltfRoot.traverse(obj => {
+          if (!armatureObj && obj.name && obj.name.toLowerCase().includes('armature')) {
+            armatureObj = obj;
+            console.log(`✅ Trovata alternativa: "${obj.name}"`);
           }
         });
-        return found;
-      }
-
-      function updateRenderCameraFromGLB() {
-        if (!animatedCamera) return;
-
-        animatedCamera.updateMatrixWorld(true);
-
-        const pos = new THREE.Vector3();
-        const quat = new THREE.Quaternion();
-
-        animatedCamera.getWorldPosition(pos);
-        animatedCamera.getWorldQuaternion(quat);
-
-        renderCamera.position.copy(pos);
-        renderCamera.quaternion.copy(quat);
-        renderCamera.fov = animatedCamera.fov || baseCameraFov;
-        renderCamera.near = animatedCamera.near || baseCameraNear;
-        renderCamera.far = animatedCamera.far || baseCameraFar;
-        renderCamera.zoom = animatedCamera.zoom || 1;
-        renderCamera.aspect = window.innerWidth / window.innerHeight;
-        renderCamera.updateProjectionMatrix();
-
-        baseCameraFov = renderCamera.fov;
-        baseCameraNear = renderCamera.near;
-        baseCameraFar = renderCamera.far;
-      }
-
-      function applyTime(time) {
-        if (!mixer) return;
-
-        // Forza il mixer sul tempo scelto dallo scroll.
-        currentTime = clamp(time, 0, clipDuration || time);
-        mixer.setTime(currentTime);
-
-        // alcune scene/rig richiedono un secondo update per propagare correttamente le matrici
-        mixer.update(0);
-        if (gltfRoot) gltfRoot.updateMatrixWorld(true);
-
-        if (animatedCamera) {
-          updateRenderCameraFromGLB();
+        if (!armatureObj) {
+          console.warn("⚠️ Nessuna armatura trovata.");
+          setStatus("⚠️ Armatura non trovata nel GLB");
+        } else {
+          setStatus("✅ Armatura trovata (nome simile)");
         }
+      } else {
+        setStatus("✅ Armature.001 trovata");
       }
-
-      function setFrameIndex(nextIndex) {
-        if (!frameTimes.length) return;
-        currentFrameIndex = clamp(nextIndex, 0, frameTimes.length - 1);
-        targetTime = frameTimes[currentFrameIndex];
-        applyTime(targetTime);
-        setStatus(
-          'Frame ' + (currentFrameIndex + 1) + ' / ' + frameTimes.length +
-          '\nTime: ' + currentTime.toFixed(4) + 's'
-        );
-      }
-
-      function stepFrame(direction) {
-        if (!mixer || !frameTimes.length) return;
-        setFrameIndex(currentFrameIndex + direction);
-      }
-
-      loader.load(
-        './invito.glb',
-        function (gltf) {
-          if (gltfRoot) scene.remove(gltfRoot);
-
-          gltfRoot = gltf.scene;
-          scene.add(gltfRoot);
-
-          gltfRoot.traverse((obj) => {
-            if (obj.isMesh) {
-              obj.frustumCulled = false;
-              obj.castShadow = true;
-              obj.receiveShadow = true;
-              if (obj.material) obj.material.needsUpdate = true;
-            }
-          });
-
-          animatedCamera = findCamera(gltfRoot);
-
-          if (animatedCamera) {
-            updateRenderCameraFromGLB();
-          }
-
-          if (gltf.animations && gltf.animations.length) {
-            mixer = new THREE.AnimationMixer(gltfRoot);
-
-            // Usa tutte le clip, senza pausa, così mixer.setTime() le forza correttamente.
-            gltf.animations.forEach((clip) => {
-              const action = mixer.clipAction(clip);
-              action.enabled = true;
-              action.paused = false;
-              action.clampWhenFinished = true;
-              action.loop = THREE.LoopOnce;
-              action.play();
-            });
-
-            // scegli la clip più lunga come riferimento per i frame
-            const refClip = gltf.animations.reduce(
-              (a, b) => (b.duration > a.duration ? b : a),
-              gltf.animations[0]
-            );
-
-            clipDuration = refClip.duration;
-            frameTimes = collectFrameTimesFromClip(refClip);
-
-            currentFrameIndex = 0;
-            currentTime = frameTimes[0] || 0;
-            targetTime = currentTime;
-
-            applyTime(currentTime);
-
-            setStatus(
-              (animatedCamera ? 'Camera trovata\n' : 'Camera non trovata\n') +
-              'Clip: ' + gltf.animations.length + '\n' +
-              'Frame disponibili: ' + frameTimes.length + '\n' +
-              'Time: ' + currentTime.toFixed(4) + 's'
-            );
-          } else {
-            mixer = null;
-            clipDuration = 0;
-            frameTimes = [];
-            currentFrameIndex = 0;
-            currentTime = 0;
-            targetTime = 0;
-            setStatus(
-              (animatedCamera ? 'Camera trovata\n' : 'Camera non trovata\n') +
-              'Nessuna animazione nel GLB'
-            );
-          }
-        },
-        function (xhr) {
-          if (xhr.total) {
-            const pct = Math.round((xhr.loaded / xhr.total) * 100);
-            setStatus('Caricamento GLB: ' + pct + '%');
-          }
-        },
-        function (err) {
-          console.error(err);
-          setStatus('Errore caricamento GLB');
+      
+      gltfRoot.traverse(obj => {
+        if(obj.isMesh) {
+          obj.frustumCulled = false;
+          obj.castShadow = true;
+          obj.receiveShadow = true;
+          if(obj.material) obj.material.needsUpdate = true;
         }
-      );
-
-      // Scroll: un evento = un frame
-      window.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        if (!mixer || !frameTimes.length) return;
-        const dir = e.deltaY > 0 ? 1 : -1;
-        stepFrame(dir);
-      }, { passive: false });
-
-      // Touch: quando superi una piccola soglia, passi al frame dopo/prima
-      let lastTouchY = 0;
-      let touchAccumulator = 0;
-
-      window.addEventListener('touchstart', (e) => {
-        if (!e.touches.length) return;
-        lastTouchY = e.touches[0].clientY;
-        touchAccumulator = 0;
-      }, { passive: false });
-
-      window.addEventListener('touchmove', (e) => {
-        if (!e.touches.length) return;
-        e.preventDefault();
-
-        const y = e.touches[0].clientY;
-        const delta = lastTouchY - y;
-        lastTouchY = y;
-        touchAccumulator += delta;
-
-        const threshold = 14;
-        if (Math.abs(touchAccumulator) >= threshold) {
-          const steps = Math.trunc(touchAccumulator / threshold);
-          touchAccumulator -= steps * threshold;
-
-          if (steps > 0) {
-            for (let i = 0; i < steps; i++) stepFrame(1);
-          } else if (steps < 0) {
-            for (let i = 0; i < Math.abs(steps); i++) stepFrame(-1);
-          }
-        }
-      }, { passive: false });
-
-      window.addEventListener('resize', () => {
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderCamera.aspect = window.innerWidth / window.innerHeight;
-        renderCamera.updateProjectionMatrix();
       });
-
-      function animate() {
-        requestAnimationFrame(animate);
-
-        if (mixer && frameTimes.length) {
-          // tieni la scena esattamente sul frame scelto
-          if (currentTime !== targetTime) {
-            applyTime(targetTime);
-          } else if (animatedCamera) {
-            updateRenderCameraFromGLB();
-          }
-        }
-
-        renderer.render(scene, renderCamera);
+      
+      animatedCamera = findCamera(gltfRoot);
+      if(animatedCamera) updateRenderCameraFromGLB();
+      
+      if(gltf.animations && gltf.animations.length) {
+        mixer = new THREE.AnimationMixer(gltfRoot);
+        gltf.animations.forEach(clip => {
+          const action = mixer.clipAction(clip);
+          action.enabled = true;
+          action.paused = false;
+          action.clampWhenFinished = true;
+          action.loop = THREE.LoopOnce;
+          action.play();
+        });
+        const refClip = gltf.animations.reduce((a,b) => (b.duration > a.duration ? b : a), gltf.animations[0]);
+        clipDuration = refClip.duration;
+        frameTimes = collectFrameTimesFromClip(refClip);
+        currentFrameIndex = 0;
+        currentTime = frameTimes[0] || 0;
+        targetTime = currentTime;
+        applyTime(currentTime);
+        setStatus(`${animatedCamera ? 'Camera GLB' : 'Camera fissa'}\nClip: ${gltf.animations.length}\nFrame: ${frameTimes.length}\nTime: ${currentTime.toFixed(4)}s`);
+      } else {
+        mixer = null;
+        setStatus(`${animatedCamera ? 'Camera trovata' : 'Nessuna camera'}\nNessuna animazione nel GLB`);
       }
+      
+      createParticles();
+    }, (xhr) => {
+      if(xhr.total) setStatus(`Caricamento GLB: ${Math.round(xhr.loaded/xhr.total*100)}%`);
+    }, (err) => {
+      console.error(err);
+      setStatus('Errore caricamento GLB');
+    });
+    
+    // Scroll / touch frame advance
+    window.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      if(!mixer || !frameTimes.length) return;
+      stepFrame(e.deltaY > 0 ? 1 : -1);
+    }, { passive: false });
+    
+    let lastTouchY = 0, touchAccum = 0;
+    window.addEventListener('touchstart', (e) => {
+      if(!e.touches.length) return;
+      lastTouchY = e.touches[0].clientY;
+      touchAccum = 0;
+    }, { passive: false });
+    window.addEventListener('touchmove', (e) => {
+      if(!e.touches.length) return;
+      e.preventDefault();
+      const delta = lastTouchY - e.touches[0].clientY;
+      lastTouchY = e.touches[0].clientY;
+      touchAccum += delta;
+      const thr = 14;
+      if(Math.abs(touchAccum) >= thr) {
+        const steps = Math.trunc(touchAccum / thr);
+        touchAccum -= steps * thr;
+        for(let i=0; i<Math.abs(steps); i++) stepFrame(steps > 0 ? 1 : -1);
+      }
+    }, { passive: false });
+    
+    window.addEventListener('resize', () => {
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
+      renderCamera.aspect = window.innerWidth / window.innerHeight;
+      renderCamera.updateProjectionMatrix();
+    });
+    
+    loadInitialEnvironment();
+    loadDefaultBackground();
+    
+    let lastFrameTime = performance.now();
+    function animate() {
+      const now = performance.now();
+      let delta = Math.min(0.033, (now - lastFrameTime) / 1000);
+      if (delta <= 0) delta = 0.016;
+      lastFrameTime = now;
+      
+      if(mixer && frameTimes.length && currentTime !== targetTime) applyTime(targetTime);
+      else if(animatedCamera) updateRenderCameraFromGLB();
+      
+      if (particleSystem && particleEnabled) updateParticles();
+      updateArmatureRotation(delta, currentFrameIndex);
+      
+      renderPass.camera = renderCamera;
+      composer.render();
+      requestAnimationFrame(animate);
+    }
+    animate();
+  })();
+</script>
 
-      animate();
-    })();
-  </script>
+<!-- SFONDO IMMAGINE (sempre visibile) -->
+<div id="background-container">
+  <img id="background-image" alt="background" style="display:block">
+</div>
+
+<!-- TUTTA LA UI (può essere nascosta con U) -->
+<div class="ui-elements">
+  <div id="toggleUI">🎛️</div>
+  <div id="uiPanel" class="ui-panel">
+    <div style="font-weight: bold; margin-bottom: 6px;">🎨 CONTROLLI FX</div>
+    <label>🌞 Esposizione <span id="exposureVal" class="value-display">1.00</span></label>
+    <input type="range" id="exposure" min="0.2" max="2.0" step="0.01" value="1.0">
+    <label>🔄 Rotazione HDR <span id="rotVal" class="value-display">0.00</span></label>
+    <input type="range" id="hdrRotate" min="0" max="1.0" step="0.005" value="0">
+    <div class="file-input-label" id="loadHdrFile">📁 Carica HDR / JPG (illuminazione)</div>
+    <hr>
+    <div class="row">
+      <button id="bloomToggle">Bloom: OFF</button>
+      <span>💠 Intensità <span id="bloomVal" class="value-display">0.60</span></span>
+      <input type="range" id="bloomIntensity" min="0.0" max="1.8" step="0.01" value="0.6">
+    </div>
+    <hr>
+    <div style="font-weight: bold; margin: 8px 0 4px 0;">✨ BOLLICINE D'ACQUA</div>
+    <button id="particleToggle">✨ Bollicine: ON</button>
+    <label>🔢 Quantità <span id="particleCountVal" class="value-display">1500</span></label>
+    <input type="range" id="particleCount" min="100" max="8000" step="100" value="1500">
+    <label>📏 Grandezza <span id="particleSizeVal" class="value-display">0.07</span></label>
+    <input type="range" id="particleSize" min="0.02" max="0.8" step="0.01" value="0.07">
+    <label>⏩ Velocità <span id="particleSpeedVal" class="value-display">0.14</span></label>
+    <input type="range" id="particleSpeed" min="0.0" max="2.0" step="0.01" value="0.14">
+    <label>🎲 Randomicità <span id="particleRandomnessVal" class="value-display">0.60</span></label>
+    <input type="range" id="particleRandomness" min="0.0" max="1.5" step="0.01" value="0.60">
+    <label>🔘 Trasparenza <span id="particleOpacityVal" class="value-display">0.57</span></label>
+    <input type="range" id="particleOpacity" min="0.0" max="1.0" step="0.01" value="0.57">
+    <label>🎨 Colore <span id="particleColorVal" class="value-display">#39FBFE</span></label>
+    <input type="color" id="particleColor" value="#39fbfe">
+    <hr>
+    <div style="font-weight: bold; margin: 8px 0 4px 0;">🔄 ROTAZIONE ARMONICA (sempre attiva)</div>
+    <label><input type="checkbox" id="rotMasterToggle" checked> Attiva rotazione</label>
+    <label>📐 Rotazione X – Velocità <span id="rotXSpeedVal" class="value-display">0.65</span> | Ampiezza <span id="rotXAmplVal" class="value-display">0.028</span></label>
+    <input type="range" id="rotXSpeed" min="0.1" max="3.0" step="0.05" value="0.65">
+    <input type="range" id="rotXAmpl" min="0.0" max="0.8" step="0.001" value="0.028">
+    <label>📐 Rotazione Y – Velocità <span id="rotYSpeedVal" class="value-display">0.55</span> | Ampiezza <span id="rotYAmplVal" class="value-display">0.124</span></label>
+    <input type="range" id="rotYSpeed" min="0.1" max="3.0" step="0.05" value="0.55">
+    <input type="range" id="rotYAmpl" min="0.0" max="0.8" step="0.001" value="0.124">
+    <label>📐 Rotazione Z – Velocità <span id="rotZSpeedVal" class="value-display">0.55</span> | Ampiezza <span id="rotZAmplVal" class="value-display">0.121</span></label>
+    <input type="range" id="rotZSpeed" min="0.1" max="3.0" step="0.05" value="0.55">
+    <input type="range" id="rotZAmpl" min="0.0" max="0.8" step="0.001" value="0.121">
+    <hr>
+    <div style="font-weight: bold; margin: 8px 0 4px 0;">🖼️ SFONDO</div>
+    <div class="file-input-label" id="loadBackgroundBtn">📁 Carica immagine sfondo</div>
+    <button id="resetBackgroundBtn">↺ Ripristina sfondo predefinito</button>
+    <div style="font-size: 11px; margin-top: 8px; color:#aaa;">L'immagine 'asset/background.png' viene caricata automaticamente.</div>
+    <div style="font-size: 11px; opacity:0.7; margin-top: 12px; text-align: center;">Scroll verticale = frame preciso | Premi <kbd>U</kbd> per mostrare/nascondere UI</div>
+  </div>
+  <div id="hint">⬇️ Scroll / swipe: frame<br>🎛️ Premi <kbd>U</kbd> per aprire i controlli</div>
+  <div id="status">Inizializzazione...</div>
+</div>
 </body>
 </html>
