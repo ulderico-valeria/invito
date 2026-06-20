@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>GLB Frame Scrubber + Bollicine + Reset fluido frame 55 + UI toggle (U)</title>
+<title>GLB Frame Scrubber - Versione Finale</title>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
 <style>
   html, body {
@@ -15,8 +16,6 @@
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     touch-action: none;
   }
-
-  /* SFONDO IMMAGINE (sempre visibile) */
   #background-container {
     position: fixed;
     top: 0;
@@ -33,7 +32,6 @@
     object-fit: cover;
     object-position: center;
   }
-
   canvas {
     position: fixed;
     top: 0;
@@ -43,8 +41,6 @@
     display: block;
     z-index: 1;
   }
-
-  /* Tutti gli elementi UI (che possono essere nascosti) */
   .ui-elements {
     position: fixed;
     top: 0;
@@ -57,7 +53,27 @@
   .ui-elements > * {
     pointer-events: auto;
   }
-
+  #scrollHint {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 36px;
+    z-index: 25;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    text-shadow: 0 0 5px rgba(0,0,0,0.5);
+  }
+  #scrollHint .material-icons {
+    font-size: 36px;
+    animation: bounce 1.2s infinite;
+  }
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(8px); }
+  }
   #toggleUI {
     position: fixed;
     bottom: 20px;
@@ -78,13 +94,12 @@
     touch-action: manipulation;
   }
   #toggleUI:active { transform: scale(0.94); background: rgba(50,50,70,0.9); }
-
   .ui-panel {
     position: fixed;
     bottom: 80px;
     left: 20px;
     right: 20px;
-    max-width: 420px;
+    max-width: 480px;
     background: rgba(20,20,28,0.94);
     backdrop-filter: blur(16px);
     border-radius: 24px;
@@ -94,26 +109,36 @@
     border: 1px solid rgba(255,255,255,0.25);
     max-height: 80vh;
     overflow-y: auto;
+    scrollbar-width: thin;
   }
   .ui-panel label {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     margin-top: 12px;
     margin-bottom: 6px;
   }
-  .ui-panel input {
+  .ui-panel input[type="range"] {
     width: 100%;
     cursor: pointer;
     background: #2c2c38;
     height: 4px;
     border-radius: 4px;
   }
-  .ui-panel .row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-top: 10px;
-    flex-wrap: wrap;
+  .ui-panel input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    margin-right: 10px;
+    accent-color: #4a9eff;
+  }
+  .ui-panel input[type="color"] {
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    border: 2px solid white;
+    border-radius: 8px;
+    background: transparent;
   }
   .ui-panel button {
     background: #3a3a4a;
@@ -139,6 +164,18 @@
   }
   hr { border-color: #444; margin: 12px 0; }
   .value-display { font-family: monospace; background: #00000066; padding: 2px 8px; border-radius: 20px; font-size: 12px; }
+  .light-control {
+    background: rgba(0,0,0,0.3);
+    border-radius: 16px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+  }
+  .light-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+    font-size: 13px;
+    color: #ffaa66;
+  }
   #status {
     position: fixed;
     right: 16px;
@@ -165,6 +202,9 @@
   @media (max-width: 600px) {
     .ui-panel { max-width: 280px; padding: 12px 14px; }
     #toggleUI { width: 42px; height: 42px; line-height: 42px; font-size: 22px; bottom: 16px; left: 16px; }
+    .light-control { padding: 6px 8px; }
+    #scrollHint { bottom: 20px; font-size: 28px; }
+    #scrollHint .material-icons { font-size: 30px; }
   }
 </style>
 
@@ -201,8 +241,9 @@
     const loadHdrBtn = document.getElementById('loadHdrFile');
     const loadBackgroundBtn = document.getElementById('loadBackgroundBtn');
     const resetBackgroundBtn = document.getElementById('resetBackgroundBtn');
+    const loadBubbleTextureBtn = document.getElementById('loadBubbleTextureBtn');
+    const resetBubbleTextureBtn = document.getElementById('resetBubbleTextureBtn');
 
-    // Particelle controls
     const particleCountSlider = document.getElementById('particleCount');
     const particleCountVal = document.getElementById('particleCountVal');
     const particleSizeSlider = document.getElementById('particleSize');
@@ -216,8 +257,12 @@
     const particleColorPicker = document.getElementById('particleColor');
     const particleColorVal = document.getElementById('particleColorVal');
     const particleToggle = document.getElementById('particleToggle');
+    
+    const bubbleRotSpeedSlider = document.getElementById('bubbleRotSpeed');
+    const bubbleRotSpeedVal = document.getElementById('bubbleRotSpeedVal');
+    const bubbleRotRandomness = document.getElementById('bubbleRotRandomness');
+    const bubbleRotRandomnessVal = document.getElementById('bubbleRotRandomnessVal');
 
-    // Rotazione armonica
     const rotXSpeed = document.getElementById('rotXSpeed');
     const rotXSpeedVal = document.getElementById('rotXSpeedVal');
     const rotXAmpl = document.getElementById('rotXAmpl');
@@ -232,30 +277,98 @@
     const rotZAmplVal = document.getElementById('rotZAmplVal');
     const rotMasterToggle = document.getElementById('rotMasterToggle');
 
+    const offsetCheckbox = document.getElementById('offsetCheckbox');
+    const testOffsetBtn = document.getElementById('testOffsetBtn');
+
+    const lightsGlobalToggle = document.getElementById('lightsGlobalToggle');
+    const lightsGlobalIntensity = document.getElementById('lightsGlobalIntensity');
+    const lightsGlobalIntensityVal = document.getElementById('lightsGlobalIntensityVal');
+    const lightsContainer = document.getElementById('lightsContainer');
+    const envToggle = document.getElementById('envToggle');
+    const envIntensitySlider = document.getElementById('envIntensity');
+    const envIntensityVal = document.getElementById('envIntensityVal');
+
     let currentEnvTexture = null;
     let composer = null;
     let bloomPass = null;
     let bloomEnabled = false;
     
-    let particleSystem = null;
-    let particleGeometry = null;
-    let particleMaterial = null;
+    let particleSprites = [];
     let particlePositions = [];
     let particleVelocities = [];
-    let particleCount = 1500;
+    let particleRotations = [];
+    let particleRotSpeeds = [];
     let particleEnabled = true;
+    let sharedTexture = null;
+    let customBubbleTexture = null;
+    let defaultBubbleTexture = null;
     
-    // Rotazione armonica con reset fluido
     let armatureObj = null;
     let rotClock = 0;
-    let rotEnabled = true;
     let resetting = false;
     let resetFinished = false;
     let currentResetRot = new THREE.Euler(0, 0, 0);
     let targetResetRot = new THREE.Euler(0, 0, 0);
     let resetLerpSpeed = 0.08;
     
-    // Texture bollicina
+    let offsetEnabled = false;
+    let originalCameraPos = new THREE.Vector3();
+    let testTimeout = null;
+    
+    let allLights = [];
+    let lightControls = new Map();
+    let lightsGlobalActive = true;
+    
+    let envActive = true;
+    let currentEnvIntensity = 1.0;
+    let envMapRef = null;
+    
+    let scrollHint = null;
+    let inactivityTimer = null;
+    let hintTimeout = null;
+    let hasScrolled = false;
+    let idleAfterFirstScroll = false;
+    
+    // Variabili per GLB
+    let gltfRoot = null;
+    let mixer = null;
+    let clipDuration = 0;
+    let frameTimes = [];
+    let currentFrameIndex = 0;
+    let currentTime = 0;
+    let targetTime = 0;
+    let animatedCamera = null;
+    let baseCameraFov = 45;
+    let baseCameraNear = 0.01;
+    let baseCameraFar = 10000;
+    
+    const MAX_FRAME = 340;
+    
+    // Carica texture bollicine default da asset/bubble_b.webp
+    function loadDefaultBubbleTexture() {
+      const imgLoader = new THREE.TextureLoader();
+      imgLoader.load('./asset/bubble_b.webp', 
+        (texture) => {
+          defaultBubbleTexture = texture;
+          if (!sharedTexture && !customBubbleTexture) {
+            sharedTexture = defaultBubbleTexture;
+            updateSharedTexture();
+          }
+          setStatus('Texture bollicine caricata da asset/bubble_b.webp');
+        },
+        undefined,
+        (err) => {
+          console.warn('Texture bubble_b.webp non trovata, uso texture procedurale');
+          defaultBubbleTexture = createGradientCircleTexture();
+          if (!sharedTexture && !customBubbleTexture) {
+            sharedTexture = defaultBubbleTexture;
+            updateSharedTexture();
+          }
+        }
+      );
+    }
+    
+    // Texture bollicina procedurale (fallback)
     function createGradientCircleTexture() {
       const canvas = document.createElement('canvas');
       canvas.width = 64;
@@ -277,7 +390,44 @@
       return texture;
     }
     
-    const gradientTexture = createGradientCircleTexture();
+    function updateSharedTexture() {
+      if (sharedTexture) sharedTexture.dispose();
+      sharedTexture = customBubbleTexture || defaultBubbleTexture;
+      for (let sprite of particleSprites) {
+        if (sprite.material) sprite.material.map = sharedTexture;
+      }
+    }
+    
+    loadBubbleTextureBtn.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/jpeg,image/png,image/webp';
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        const imgLoader = new THREE.TextureLoader();
+        imgLoader.load(url, (texture) => {
+          if (customBubbleTexture) customBubbleTexture.dispose();
+          customBubbleTexture = texture;
+          updateSharedTexture();
+          setStatus('Texture bollicine personalizzata caricata');
+          URL.revokeObjectURL(url);
+        }, undefined, (err) => { console.error(err); setStatus('Errore caricamento texture'); });
+      };
+      input.click();
+    });
+    resetBubbleTextureBtn.addEventListener('click', () => {
+      if (customBubbleTexture) {
+        customBubbleTexture.dispose();
+        customBubbleTexture = null;
+      }
+      if (defaultBubbleTexture) {
+        sharedTexture = defaultBubbleTexture;
+        updateSharedTexture();
+        setStatus('Texture bollicine reimpostata a bubble_b.webp');
+      }
+    });
     
     // Sfondo immagine
     const bgImage = document.getElementById('background-image');
@@ -317,7 +467,7 @@
       resetBackgroundToDefault();
     });
     
-    // Setup Three.js trasparente
+    // Setup Three.js
     const scene = new THREE.Scene();
     scene.background = null;
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -343,10 +493,10 @@
     const renderCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 10000);
     renderCamera.position.set(0, 0, 5);
     
-    // HDR environment
     const pmremGen = new THREE.PMREMGenerator(renderer);
     pmremGen.compileEquirectangularShader();
     
+    // Funzioni ambiente
     function applyEnvironmentTexture(texture, isHdr = false) {
       if (!texture) return;
       texture.mapping = THREE.EquirectangularReflectionMapping;
@@ -355,8 +505,25 @@
       texture.offset.x = rotSlider ? parseFloat(rotSlider.value) : 0;
       currentEnvTexture = texture;
       const newEnvMap = pmremGen.fromEquirectangular(texture).texture;
-      scene.environment = newEnvMap;
+      envMapRef = newEnvMap;
+      if (envActive) {
+        scene.environment = envMapRef;
+        scene.environment.intensity = currentEnvIntensity;
+      } else {
+        scene.environment = null;
+      }
       setStatus(`Ambiente HDR caricato: ${isHdr ? 'HDR' : 'JPG'}`);
+    }
+    function updateEnvironmentIntensity() {
+      if (scene.environment) scene.environment.intensity = currentEnvIntensity;
+    }
+    function updateEnvironmentVisibility() {
+      if (envActive && envMapRef) {
+        scene.environment = envMapRef;
+        scene.environment.intensity = currentEnvIntensity;
+      } else {
+        scene.environment = null;
+      }
     }
     function loadInitialEnvironment() {
       const hdrLoader = new RGBELoader();
@@ -401,7 +568,9 @@
       currentEnvTexture.offset.x = value01;
       currentEnvTexture.needsUpdate = true;
       const newEnvMap = pmremGen.fromEquirectangular(currentEnvTexture).texture;
-      scene.environment = newEnvMap;
+      envMapRef = newEnvMap;
+      if (envActive) scene.environment = envMapRef;
+      updateEnvironmentIntensity();
     }
     rotSlider.addEventListener('input', (e) => {
       const val = parseFloat(e.target.value);
@@ -426,48 +595,240 @@
     });
     bloomIntensity.disabled = true;
     
-    // ---------- PARTICELLE A BOLLICINE ----------
-    function createParticles() {
-      if (particleSystem) {
-        scene.remove(particleSystem);
-        if (particleGeometry) particleGeometry.dispose();
-        if (particleMaterial) particleMaterial.dispose();
-      }
-      const count = Math.floor(parseFloat(particleCountSlider.value));
-      const size = parseFloat(particleSizeSlider.value);
-      const opacity = parseFloat(particleOpacitySlider.value);
-      const colorHex = particleColorPicker.value;
-      const color = new THREE.Color(colorHex);
+    envToggle.addEventListener('change', (e) => {
+      envActive = e.target.checked;
+      updateEnvironmentVisibility();
+    });
+    envIntensitySlider.addEventListener('input', () => {
+      currentEnvIntensity = parseFloat(envIntensitySlider.value);
+      envIntensityVal.textContent = currentEnvIntensity.toFixed(2);
+      updateEnvironmentIntensity();
+    });
+    envIntensitySlider.value = "1.0";
+    envIntensityVal.textContent = "1.00";
+    envActive = true;
+    envToggle.checked = true;
+    
+    // Luci GLB - con valori predefiniti aggiornati
+    function collectAndCreateLightControls(root) {
+      allLights = [];
+      lightControls.clear();
+      lightsContainer.innerHTML = '';
       
-      particleGeometry = new THREE.BufferGeometry();
-      const positions = new Float32Array(count * 3);
+      // Mappa per impostare valori predefiniti specifici per luce
+      const defaultLightValues = {
+        'spot': { intensity: 2.81, angle: 0.15, distance: 0, color: '#ffffff' },
+        'spot001': { intensity: 1.01, angle: 0.48, distance: 0, color: '#ffffff' }
+      };
+      
+      root.traverse(obj => {
+        if (obj.isLight) {
+          allLights.push(obj);
+          const lightDiv = document.createElement('div');
+          lightDiv.className = 'light-control';
+          const name = obj.name || (obj.type === 'SpotLight' ? 'Spot' : obj.type);
+          const title = document.createElement('div');
+          title.className = 'light-title';
+          title.textContent = `🔆 ${name}`;
+          lightDiv.appendChild(title);
+          
+          // Applica valori predefiniti se la luce ha un nome nella mappa
+          if (defaultLightValues[name]) {
+            const vals = defaultLightValues[name];
+            obj.intensity = vals.intensity;
+            if (obj.type === 'SpotLight') {
+              obj.angle = vals.angle;
+              obj.distance = vals.distance;
+              if (vals.color) obj.color.set(vals.color);
+            }
+          }
+          
+          const toggleLabel = document.createElement('label');
+          const toggleCheck = document.createElement('input');
+          toggleCheck.type = 'checkbox';
+          toggleCheck.checked = true;
+          toggleCheck.style.width = '20px';
+          toggleCheck.style.height = '20px';
+          toggleCheck.style.accentColor = '#4a9eff';
+          const toggleSpan = document.createElement('span');
+          toggleSpan.textContent = ' Attiva';
+          toggleLabel.appendChild(toggleCheck);
+          toggleLabel.appendChild(toggleSpan);
+          lightDiv.appendChild(toggleLabel);
+          
+          const intensityLabel = document.createElement('label');
+          intensityLabel.innerHTML = `🔆 Intensità <span class="value-display" id="intensity-${obj.id}">${obj.intensity.toFixed(2)}</span>`;
+          const intensitySlider = document.createElement('input');
+          intensitySlider.type = 'range';
+          intensitySlider.min = 0;
+          intensitySlider.max = 5;
+          intensitySlider.step = 0.01;
+          intensitySlider.value = obj.intensity;
+          intensitySlider.style.width = '100%';
+          lightDiv.appendChild(intensityLabel);
+          lightDiv.appendChild(intensitySlider);
+          
+          const origIntensity = obj.intensity;
+          const updateLight = () => {
+            if (toggleCheck.checked) {
+              obj.intensity = parseFloat(intensitySlider.value);
+            } else {
+              obj.intensity = 0;
+            }
+          };
+          toggleCheck.addEventListener('change', updateLight);
+          intensitySlider.addEventListener('input', () => {
+            const val = parseFloat(intensitySlider.value);
+            intensityLabel.querySelector('.value-display').textContent = val.toFixed(2);
+            updateLight();
+          });
+          
+          if (obj.type === 'SpotLight') {
+            const angleLabel = document.createElement('label');
+            angleLabel.innerHTML = `📐 Angolo <span class="value-display">${obj.angle.toFixed(2)}</span>`;
+            const angleSlider = document.createElement('input');
+            angleSlider.type = 'range';
+            angleSlider.min = 0.05;
+            angleSlider.max = 1.2;
+            angleSlider.step = 0.01;
+            angleSlider.value = obj.angle;
+            angleSlider.style.width = '100%';
+            angleSlider.addEventListener('input', () => {
+              const val = parseFloat(angleSlider.value);
+              angleLabel.querySelector('.value-display').textContent = val.toFixed(2);
+              obj.angle = val;
+            });
+            lightDiv.appendChild(angleLabel);
+            lightDiv.appendChild(angleSlider);
+            
+            const distLabel = document.createElement('label');
+            distLabel.innerHTML = `📏 Distanza <span class="value-display">${obj.distance.toFixed(1)}</span>`;
+            const distSlider = document.createElement('input');
+            distSlider.type = 'range';
+            distSlider.min = 0;
+            distSlider.max = 40;
+            distSlider.step = 1;
+            distSlider.value = obj.distance;
+            distSlider.style.width = '100%';
+            distSlider.addEventListener('input', () => {
+              const val = parseFloat(distSlider.value);
+              distLabel.querySelector('.value-display').textContent = val.toFixed(1);
+              obj.distance = val;
+            });
+            lightDiv.appendChild(distLabel);
+            lightDiv.appendChild(distSlider);
+            
+            const colorLabel = document.createElement('label');
+            colorLabel.innerHTML = `🎨 Colore <span class="value-display">#${obj.color.getHexString()}</span>`;
+            const colorPicker = document.createElement('input');
+            colorPicker.type = 'color';
+            colorPicker.value = '#' + obj.color.getHexString();
+            colorPicker.style.width = '50px';
+            colorPicker.style.height = '40px';
+            colorPicker.style.cursor = 'pointer';
+            colorPicker.style.border = '2px solid white';
+            colorPicker.style.borderRadius = '8px';
+            colorPicker.addEventListener('input', () => {
+              const colorVal = colorPicker.value;
+              colorLabel.querySelector('.value-display').textContent = colorVal.toUpperCase();
+              obj.color.set(colorVal);
+            });
+            const colorDiv = document.createElement('div');
+            colorDiv.style.display = 'flex';
+            colorDiv.style.alignItems = 'center';
+            colorDiv.style.gap = '10px';
+            colorDiv.appendChild(colorLabel);
+            colorDiv.appendChild(colorPicker);
+            lightDiv.appendChild(colorDiv);
+          }
+          lightsContainer.appendChild(lightDiv);
+          lightControls.set(obj, { toggleCheck, intensitySlider, origIntensity });
+        }
+      });
+      
+      lightsGlobalIntensity.addEventListener('input', () => {
+        const mult = parseFloat(lightsGlobalIntensity.value);
+        lightsGlobalIntensityVal.textContent = mult.toFixed(2);
+        allLights.forEach(light => {
+          const ctrl = lightControls.get(light);
+          if (ctrl && ctrl.toggleCheck.checked) {
+            light.intensity = ctrl.origIntensity * mult;
+            if (ctrl.intensitySlider) ctrl.intensitySlider.value = light.intensity;
+          }
+        });
+      });
+      lightsGlobalToggle.addEventListener('change', (e) => {
+        lightsGlobalActive = e.target.checked;
+        allLights.forEach(light => {
+          const ctrl = lightControls.get(light);
+          if (ctrl) {
+            ctrl.toggleCheck.checked = lightsGlobalActive;
+            if (lightsGlobalActive) {
+              light.intensity = ctrl.origIntensity * parseFloat(lightsGlobalIntensity.value);
+              if (ctrl.intensitySlider) ctrl.intensitySlider.value = light.intensity;
+            } else {
+              light.intensity = 0;
+            }
+          }
+        });
+      });
+    }
+    
+    // ---------- SISTEMA A SPRITE PER BOLLICINE ----------
+    function createParticles() {
+      for (let sprite of particleSprites) {
+        scene.remove(sprite);
+        if (sprite.material) sprite.material.dispose();
+      }
+      particleSprites = [];
       particlePositions = [];
       particleVelocities = [];
+      particleRotations = [];
+      particleRotSpeeds = [];
+      
+      const count = Math.floor(parseFloat(particleCountSlider.value) || 1200);
+      const size = parseFloat(particleSizeSlider.value) || 0.05;
+      const opacity = parseFloat(particleOpacitySlider.value) || 0.57;
+      const colorHex = particleColorPicker.value || '#39FBFE';
+      const color = new THREE.Color(colorHex);
+      
+      const material = new THREE.SpriteMaterial({
+        map: sharedTexture,
+        color: color,
+        transparent: true,
+        opacity: opacity,
+        blending: THREE.NormalBlending
+      });
+      
+      const baseRotSpeed = parseFloat(bubbleRotSpeedSlider.value) || 0.02;
+      const rotRand = parseFloat(bubbleRotRandomness.value) || 0.01;
+      
       for (let i = 0; i < count; i++) {
         const x = (Math.random() - 0.5) * 14;
         const y = (Math.random() - 0.5) * 10;
         const z = (Math.random() - 0.5) * 16 - 3;
-        positions[i*3] = x;
-        positions[i*3+1] = y;
-        positions[i*3+2] = z;
-        particlePositions.push(new THREE.Vector3(x, y, z));
+        const pos = new THREE.Vector3(x, y, z);
+        particlePositions.push(pos);
+        
         particleVelocities.push(new THREE.Vector3(
           (Math.random() - 0.5) * 0.01,
           Math.random() * 0.02 + 0.01,
           (Math.random() - 0.5) * 0.01
         ));
+        
+        // ROTAZIONE INDIVIDUALE: ogni bolla ha velocità angolare diversa
+        particleRotations.push(Math.random() * Math.PI * 2);
+        let speed = baseRotSpeed + (Math.random() - 0.5) * rotRand * 2;
+        speed = Math.max(0.001, Math.min(0.08, speed));
+        particleRotSpeeds.push(speed);
+        
+        const sprite = new THREE.Sprite(material.clone());
+        sprite.material = material;
+        sprite.scale.set(size, size, 1);
+        sprite.position.copy(pos);
+        scene.add(sprite);
+        particleSprites.push(sprite);
       }
-      particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      particleMaterial = new THREE.PointsMaterial({
-        color: color,
-        size: size,
-        map: gradientTexture,
-        transparent: true,
-        opacity: opacity,
-        blending: THREE.AdditiveBlending
-      });
-      particleSystem = new THREE.Points(particleGeometry, particleMaterial);
-      scene.add(particleSystem);
       
       particleCountVal.textContent = count;
       particleSizeVal.textContent = size.toFixed(2);
@@ -476,12 +837,17 @@
     }
     
     function updateParticles() {
-      if (!particleSystem) return;
-      const positionsAttribute = particleGeometry.attributes.position;
-      const positionsArray = positionsAttribute.array;
-      const speed = parseFloat(particleSpeedSlider.value);
-      const randomness = parseFloat(particleRandomnessSlider.value);
-      const count = particlePositions.length;
+      if (!particleEnabled) return;
+      const speed = parseFloat(particleSpeedSlider.value) || 0.14;
+      const randomness = parseFloat(particleRandomnessSlider.value) || 0.63;
+      const count = particleSprites.length;
+      const opacity = parseFloat(particleOpacitySlider.value) || 0.57;
+      const colorHex = particleColorPicker.value || '#39FBFE';
+      
+      if (particleSprites.length > 0 && particleSprites[0].material) {
+        particleSprites[0].material.color.set(colorHex);
+        particleSprites[0].material.opacity = opacity;
+      }
       
       for (let i = 0; i < count; i++) {
         if (randomness > 0) {
@@ -524,24 +890,130 @@
         }
         
         particlePositions[i].set(newX, newY, newZ);
-        positionsArray[i*3] = newX;
-        positionsArray[i*3+1] = newY;
-        positionsArray[i*3+2] = newZ;
+        particleSprites[i].position.copy(particlePositions[i]);
+        
+        // ROTAZIONE INDIVIDUALE: ogni bolla ruota alla sua velocità
+        particleRotations[i] += particleRotSpeeds[i];
+        particleSprites[i].material.rotation = particleRotations[i];
       }
-      positionsAttribute.needsUpdate = true;
     }
     
-    function rebuildParticles() {
-      createParticles();
+    function rebuildParticles() { createParticles(); }
+    
+    // ---------- FUNZIONI PER GESTIRE ANIMAZIONI ----------
+    function findCamera(root) {
+      let found = null;
+      root.traverse((obj) => {
+        if (found) return;
+        if (obj.isCamera || obj.type === 'PerspectiveCamera' || obj.type === 'OrthographicCamera' || (obj.name && obj.name.toLowerCase().includes('camera'))) found = obj;
+      });
+      return found;
     }
     
-    // ---------- ROTAZIONE ARMONICA CON RESET AL FRAME 55 ----------
-    function updateArmatureRotation(deltaTime, currentFrame) {
+    function updateRenderCameraFromGLB() {
+      if (!animatedCamera) return;
+      animatedCamera.updateMatrixWorld(true);
+      const pos = new THREE.Vector3();
+      const quat = new THREE.Quaternion();
+      animatedCamera.getWorldPosition(pos);
+      animatedCamera.getWorldQuaternion(quat);
+      renderCamera.position.copy(pos);
+      renderCamera.quaternion.copy(quat);
+      renderCamera.fov = animatedCamera.fov || baseCameraFov;
+      renderCamera.near = animatedCamera.near || baseCameraNear;
+      renderCamera.far = animatedCamera.far || baseCameraFar;
+      renderCamera.zoom = animatedCamera.zoom || 1;
+      renderCamera.aspect = window.innerWidth / window.innerHeight;
+      renderCamera.updateProjectionMatrix();
+    }
+    
+    function applyTime(time) {
+      if (!mixer) return;
+      const maxTime = clipDuration || 1;
+      let clampedTime = Math.min(Math.max(time, 0), maxTime);
+      currentTime = clampedTime;
+      
+      const maxFrameIndex = Math.min(frameTimes.length - 1, MAX_FRAME - 1);
+      if (currentFrameIndex >= maxFrameIndex) {
+        setFrameIndex(0);
+        return;
+      }
+      
+      try {
+        mixer.setTime(clampedTime);
+        mixer.update(0);
+        if (gltfRoot) gltfRoot.updateMatrixWorld(true);
+        if (animatedCamera) updateRenderCameraFromGLB();
+      } catch (e) {
+        console.warn('Errore durante setTime:', e);
+        try { mixer.setTime(0); mixer.update(0); } catch (e2) {}
+      }
+    }
+    
+    function setFrameIndex(nextIndex) {
+      if (!frameTimes.length) return;
+      const maxIndex = Math.min(frameTimes.length - 1, MAX_FRAME - 1);
+      
+      if (nextIndex > maxIndex) {
+        currentFrameIndex = 0;
+        targetTime = frameTimes[0] || 0;
+        applyTime(targetTime);
+        setStatus(`Frame ${currentFrameIndex+1}/${frameTimes.length} (LOOP)\nTime: ${currentTime.toFixed(4)}s`);
+        return;
+      }
+      
+      currentFrameIndex = Math.min(Math.max(nextIndex, 0), maxIndex);
+      targetTime = frameTimes[currentFrameIndex];
+      
+      const maxTime = clipDuration || frameTimes[maxIndex] || 1;
+      if (targetTime > maxTime) {
+        targetTime = maxTime;
+        let closestIdx = 0;
+        for (let i = 0; i < frameTimes.length; i++) {
+          if (Math.abs(frameTimes[i] - maxTime) < Math.abs(frameTimes[closestIdx] - maxTime)) {
+            closestIdx = i;
+          }
+        }
+        currentFrameIndex = Math.min(closestIdx, maxIndex);
+        targetTime = frameTimes[currentFrameIndex];
+      }
+      
+      applyTime(targetTime);
+      setStatus(`Frame ${currentFrameIndex+1}/${Math.min(frameTimes.length, MAX_FRAME)}\nTime: ${currentTime.toFixed(4)}s`);
+    }
+    
+    function stepFrame(direction) {
+      if (!mixer || !frameTimes.length) return;
+      setFrameIndex(currentFrameIndex + direction);
+    }
+    
+    function uniqueSorted(values) {
+      const filtered = values.filter(v => Number.isFinite(v));
+      const uniq = Array.from(new Set(filtered.map(v => +v.toFixed(6))));
+      uniq.sort((a,b)=>a-b);
+      return uniq;
+    }
+    
+    function collectFrameTimesFromClip(clip) {
+      const times = [];
+      clip.tracks.forEach(track => { if(track && track.times) times.push(...track.times); });
+      let uniq = uniqueSorted(times);
+      if(uniq.length >= 2) return uniq;
+      const fps = 30;
+      const step = 1/fps;
+      const generated = [];
+      for(let t=0; t<=clip.duration+1e-6; t+=step) generated.push(+t.toFixed(6));
+      if(generated[generated.length-1] !== +clip.duration.toFixed(6)) generated.push(+clip.duration.toFixed(6));
+      return uniqueSorted(generated);
+    }
+    
+    // Rotazione armatura
+    function updateArmatureRotation(deltaTime) {
       if (!armatureObj) return;
       
       const resetFrame = 55;
-      const shouldReset = (currentFrame >= resetFrame) && !resetFinished && !resetting;
-      const shouldReactivate = (currentFrame < resetFrame) && resetFinished;
+      const shouldReset = (currentFrameIndex >= resetFrame) && !resetFinished && !resetting;
+      const shouldReactivate = (currentFrameIndex < resetFrame) && resetFinished;
       
       if (shouldReset) {
         resetting = true;
@@ -573,6 +1045,7 @@
       }
       
       if (resetFinished) return;
+      
       if (!rotMasterToggle.checked) {
         armatureObj.rotation.x *= 0.98;
         armatureObj.rotation.y *= 0.98;
@@ -593,7 +1066,7 @@
       armatureObj.rotation.z = Math.sin(rotClock * speedZ) * amplZ;
     }
     
-    // Eventi UI rotazione
+    // Eventi UI
     rotXSpeed.addEventListener('input', () => { rotXSpeedVal.textContent = parseFloat(rotXSpeed.value).toFixed(2); });
     rotXAmpl.addEventListener('input', () => { rotXAmplVal.textContent = parseFloat(rotXAmpl.value).toFixed(3); });
     rotYSpeed.addEventListener('input', () => { rotYSpeedVal.textContent = parseFloat(rotYSpeed.value).toFixed(2); });
@@ -601,7 +1074,6 @@
     rotZSpeed.addEventListener('input', () => { rotZSpeedVal.textContent = parseFloat(rotZSpeed.value).toFixed(2); });
     rotZAmpl.addEventListener('input', () => { rotZAmplVal.textContent = parseFloat(rotZAmpl.value).toFixed(3); });
     
-    // Valori rotazione
     rotXSpeed.value = "0.65"; rotXSpeedVal.textContent = "0.65";
     rotXAmpl.value = "0.028"; rotXAmplVal.textContent = "0.028";
     rotYSpeed.value = "0.55"; rotYSpeedVal.textContent = "0.55";
@@ -610,15 +1082,25 @@
     rotZAmpl.value = "0.121"; rotZAmplVal.textContent = "0.121";
     rotMasterToggle.checked = true;
     
-    // Valori particelle
-    particleCountSlider.value = "1500";
-    particleSizeSlider.value = "0.07";
+    // Valori predefiniti bollicine
+    particleCountSlider.value = "1200";
+    particleSizeSlider.value = "0.05";
     particleSpeedSlider.value = "0.14";
-    particleRandomnessSlider.value = "0.60";
+    particleRandomnessSlider.value = "0.63";
     particleOpacitySlider.value = "0.57";
     particleColorPicker.value = "#39FBFE";
     particleToggle.textContent = '✨ Bollicine: ON';
     particleEnabled = true;
+    
+    bubbleRotSpeedSlider.value = "0.02";
+    bubbleRotSpeedVal.textContent = "0.020";
+    bubbleRotRandomness.value = "0.01";
+    bubbleRotRandomnessVal.textContent = "0.010";
+    
+    // Intensità globale luci predefinita 0.80
+    lightsGlobalIntensity.value = "0.80";
+    lightsGlobalIntensityVal.textContent = "0.80";
+    lightsGlobalToggle.checked = true;
     
     particleCountSlider.addEventListener('input', () => {
       particleCountVal.textContent = particleCountSlider.value;
@@ -627,7 +1109,9 @@
     particleSizeSlider.addEventListener('input', () => {
       const val = parseFloat(particleSizeSlider.value);
       particleSizeVal.textContent = val.toFixed(2);
-      if (particleMaterial) particleMaterial.size = val;
+      for (let sprite of particleSprites) {
+        sprite.scale.set(val, val, 1);
+      }
     });
     particleSpeedSlider.addEventListener('input', () => {
       particleSpeedVal.textContent = parseFloat(particleSpeedSlider.value).toFixed(2);
@@ -638,28 +1122,137 @@
     particleOpacitySlider.addEventListener('input', () => {
       const val = parseFloat(particleOpacitySlider.value);
       particleOpacityVal.textContent = val.toFixed(2);
-      if (particleMaterial) particleMaterial.opacity = val;
+      if (particleSprites.length > 0) particleSprites[0].material.opacity = val;
     });
     particleColorPicker.addEventListener('input', () => {
       const val = particleColorPicker.value;
       particleColorVal.textContent = val.toUpperCase();
-      if (particleMaterial) particleMaterial.color.set(val);
+      if (particleSprites.length > 0) particleSprites[0].material.color.set(val);
     });
     particleToggle.addEventListener('click', () => {
       particleEnabled = !particleEnabled;
-      if (particleSystem) particleSystem.visible = particleEnabled;
+      for (let sprite of particleSprites) {
+        sprite.visible = particleEnabled;
+      }
       particleToggle.textContent = particleEnabled ? '✨ Bollicine: ON' : '✨ Bollicine: OFF';
     });
     
-    // ---------- GESTIONE UI: toggle con tasto U (senza nascondere lo sfondo) ----------
+    bubbleRotSpeedSlider.addEventListener('input', () => {
+      const val = parseFloat(bubbleRotSpeedSlider.value);
+      bubbleRotSpeedVal.textContent = val.toFixed(3);
+      const randFactor = parseFloat(bubbleRotRandomness.value);
+      for (let i = 0; i < particleRotSpeeds.length; i++) {
+        let speed = val;
+        if (randFactor > 0) {
+          speed += (Math.random() - 0.5) * randFactor;
+          speed = Math.max(0.001, Math.min(0.08, speed));
+        }
+        particleRotSpeeds[i] = speed;
+      }
+    });
+    bubbleRotRandomness.addEventListener('input', () => {
+      const randVal = parseFloat(bubbleRotRandomness.value);
+      bubbleRotRandomnessVal.textContent = randVal.toFixed(3);
+      const baseSpeed = parseFloat(bubbleRotSpeedSlider.value);
+      for (let i = 0; i < particleRotSpeeds.length; i++) {
+        let speed = baseSpeed;
+        if (randVal > 0) {
+          speed += (Math.random() - 0.5) * randVal;
+          speed = Math.max(0.001, Math.min(0.08, speed));
+        }
+        particleRotSpeeds[i] = speed;
+      }
+    });
+    
+    // Offset X
+    function detectMobile() {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+    }
+    const isMobile = detectMobile();
+    if (isMobile) {
+      offsetEnabled = true;
+      offsetCheckbox.checked = true;
+      setStatus("📱 Smartphone rilevato – offset X +6cm attivo");
+    } else {
+      offsetEnabled = false;
+      offsetCheckbox.checked = false;
+    }
+    function applyOffset() {
+      if (offsetEnabled) renderCamera.position.x = originalCameraPos.x + 0.06;
+      else renderCamera.position.x = originalCameraPos.x;
+    }
+    offsetCheckbox.addEventListener('change', (e) => {
+      offsetEnabled = e.target.checked;
+      applyOffset();
+    });
+    testOffsetBtn.addEventListener('click', () => {
+      if (testTimeout) clearTimeout(testTimeout);
+      const wasEnabled = offsetEnabled;
+      offsetEnabled = true;
+      applyOffset();
+      testTimeout = setTimeout(() => {
+        offsetEnabled = wasEnabled;
+        applyOffset();
+        offsetCheckbox.checked = wasEnabled;
+        testTimeout = null;
+      }, 2000);
+    });
+    
+    // Scroll hint
+    scrollHint = document.createElement('div');
+    scrollHint.id = 'scrollHint';
+    scrollHint.innerHTML = '<span class="material-icons">keyboard_arrow_down</span>';
+    document.body.appendChild(scrollHint);
+    
+    function showHint(permanent = false) {
+      if (hasScrolled && !permanent) {
+        scrollHint.style.opacity = '1';
+        if (hintTimeout) clearTimeout(hintTimeout);
+        hintTimeout = setTimeout(() => {
+          if (scrollHint) scrollHint.style.opacity = '0';
+          idleAfterFirstScroll = false;
+        }, 3000);
+      } else if (!hasScrolled) {
+        scrollHint.style.opacity = '1';
+        if (hintTimeout) clearTimeout(hintTimeout);
+      }
+    }
+    
+    function resetInactivityTimer() {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(() => {
+        if (hasScrolled && !idleAfterFirstScroll) {
+          idleAfterFirstScroll = true;
+          showHint(false);
+        } else if (!hasScrolled) {
+          showHint(true);
+        }
+      }, 30000);
+    }
+    
+    function onUserInteraction() {
+      if (!hasScrolled) {
+        hasScrolled = true;
+        scrollHint.style.opacity = '0';
+        if (hintTimeout) clearTimeout(hintTimeout);
+        resetInactivityTimer();
+      } else {
+        resetInactivityTimer();
+      }
+    }
+    
+    setTimeout(() => {
+      if (!hasScrolled) showHint(true);
+    }, 5000);
+    resetInactivityTimer();
+    
+    // UI toggle con tasto U (rimosso pulsante mobile)
     let uiVisible = false;
     function toggleUI() {
       uiVisible = !uiVisible;
       uiElements.style.display = uiVisible ? 'block' : 'none';
     }
-    // All'avvio, nascondi tutta l'UI (ma lo sfondo resta visibile)
     uiElements.style.display = 'none';
-    
     window.addEventListener('keydown', (e) => {
       if (e.key === 'u' || e.key === 'U') {
         e.preventDefault();
@@ -667,118 +1260,25 @@
       }
     });
     
-    // ---------- GLB Loading ----------
+    // ---------- GLB LOADING ----------
     const loader = new GLTFLoader();
-    let gltfRoot = null;
-    let mixer = null;
-    let clipDuration = 0;
-    let frameTimes = [];
-    let currentFrameIndex = 0;
-    let currentTime = 0;
-    let targetTime = 0;
-    let animatedCamera = null;
-    let baseCameraFov = renderCamera.fov, baseCameraNear = renderCamera.near, baseCameraFar = renderCamera.far;
-    
-    function findCamera(root) {
-      let found = null;
-      root.traverse((obj) => {
-        if (found) return;
-        if (obj.isCamera || obj.type === 'PerspectiveCamera' || obj.type === 'OrthographicCamera' || (obj.name && obj.name.toLowerCase().includes('camera'))) {
-          found = obj;
-        }
-      });
-      return found;
-    }
-    
-    function updateRenderCameraFromGLB() {
-      if (!animatedCamera) return;
-      animatedCamera.updateMatrixWorld(true);
-      const pos = new THREE.Vector3();
-      const quat = new THREE.Quaternion();
-      animatedCamera.getWorldPosition(pos);
-      animatedCamera.getWorldQuaternion(quat);
-      renderCamera.position.copy(pos);
-      renderCamera.quaternion.copy(quat);
-      renderCamera.fov = animatedCamera.fov || baseCameraFov;
-      renderCamera.near = animatedCamera.near || baseCameraNear;
-      renderCamera.far = animatedCamera.far || baseCameraFar;
-      renderCamera.zoom = animatedCamera.zoom || 1;
-      renderCamera.aspect = window.innerWidth / window.innerHeight;
-      renderCamera.updateProjectionMatrix();
-      baseCameraFov = renderCamera.fov;
-    }
-    
-    function applyTime(time) {
-      if (!mixer) return;
-      currentTime = Math.min(Math.max(time, 0), clipDuration || time);
-      mixer.setTime(currentTime);
-      mixer.update(0);
-      if (gltfRoot) gltfRoot.updateMatrixWorld(true);
-      if (animatedCamera) updateRenderCameraFromGLB();
-    }
-    
-    function setFrameIndex(nextIndex) {
-      if (!frameTimes.length) return;
-      currentFrameIndex = Math.min(Math.max(nextIndex, 0), frameTimes.length - 1);
-      targetTime = frameTimes[currentFrameIndex];
-      applyTime(targetTime);
-      setStatus(`Frame ${currentFrameIndex+1}/${frameTimes.length}\nTime: ${currentTime.toFixed(4)}s`);
-    }
-    
-    function stepFrame(direction) {
-      if (!mixer || !frameTimes.length) return;
-      setFrameIndex(currentFrameIndex + direction);
-    }
-    
-    function uniqueSorted(values) {
-      const filtered = values.filter(v => Number.isFinite(v));
-      const uniq = Array.from(new Set(filtered.map(v => +v.toFixed(6))));
-      uniq.sort((a,b)=>a-b);
-      return uniq;
-    }
-    
-    function collectFrameTimesFromClip(clip) {
-      const times = [];
-      clip.tracks.forEach(track => {
-        if(track && track.times) times.push(...track.times);
-      });
-      let uniq = uniqueSorted(times);
-      if(uniq.length >= 2) return uniq;
-      const fps = 30;
-      const step = 1/fps;
-      const generated = [];
-      for(let t=0; t<=clip.duration+1e-6; t+=step) generated.push(+t.toFixed(6));
-      if(generated[generated.length-1] !== +clip.duration.toFixed(6)) generated.push(+clip.duration.toFixed(6));
-      return uniqueSorted(generated);
-    }
     
     loader.load('./invito.glb', (gltf) => {
       if(gltfRoot) scene.remove(gltfRoot);
       gltfRoot = gltf.scene;
       scene.add(gltfRoot);
       
+      collectAndCreateLightControls(gltfRoot);
+      
       armatureObj = null;
       gltfRoot.traverse(obj => {
-        if (obj.name && obj.name.toLowerCase() === "armature.001") {
-          armatureObj = obj;
-          console.log("✅ Trovata Armature.001");
-        }
+        if (obj.name && obj.name.toLowerCase() === "armature.001") armatureObj = obj;
       });
       if (!armatureObj) {
         gltfRoot.traverse(obj => {
-          if (!armatureObj && obj.name && obj.name.toLowerCase().includes('armature')) {
-            armatureObj = obj;
-            console.log(`✅ Trovata alternativa: "${obj.name}"`);
-          }
+          if (!armatureObj && obj.name && obj.name.toLowerCase().includes('armature')) armatureObj = obj;
         });
-        if (!armatureObj) {
-          console.warn("⚠️ Nessuna armatura trovata.");
-          setStatus("⚠️ Armatura non trovata nel GLB");
-        } else {
-          setStatus("✅ Armatura trovata (nome simile)");
-        }
-      } else {
-        setStatus("✅ Armature.001 trovata");
+        if (armatureObj) console.log("✅ Trovata armatura alternativa:", armatureObj.name);
       }
       
       gltfRoot.traverse(obj => {
@@ -792,9 +1292,39 @@
       
       animatedCamera = findCamera(gltfRoot);
       if(animatedCamera) updateRenderCameraFromGLB();
+      originalCameraPos.copy(renderCamera.position);
       
       if(gltf.animations && gltf.animations.length) {
+        console.log(`✅ Trovate ${gltf.animations.length} animazioni`);
+        gltf.animations.forEach((clip, idx) => {
+          console.log(`  ${idx+1}. "${clip.name}" - durata: ${clip.duration}s, tracce: ${clip.tracks.length}`);
+        });
+        
+        const trackNameMap = {
+          'Plane.004': 'Plane013',
+          'Plane.008': 'Plane015'
+        };
+        
+        gltf.animations.forEach(clip => {
+          clip.tracks.forEach(track => {
+            for (const [oldName, newName] of Object.entries(trackNameMap)) {
+              if (track.name.startsWith(oldName + '.')) {
+                const newTrackName = track.name.replace(oldName, newName);
+                console.log(`🔀 Rinomina traccia: "${track.name}" → "${newTrackName}"`);
+                track.name = newTrackName;
+              }
+            }
+          });
+        });
+        
         mixer = new THREE.AnimationMixer(gltfRoot);
+        
+        let maxDuration = 0;
+        gltf.animations.forEach(clip => {
+          if (clip.duration > maxDuration) maxDuration = clip.duration;
+        });
+        clipDuration = maxDuration;
+        
         gltf.animations.forEach(clip => {
           const action = mixer.clipAction(clip);
           action.enabled = true;
@@ -803,14 +1333,22 @@
           action.loop = THREE.LoopOnce;
           action.play();
         });
+        
+        mixer.update(0);
+        
         const refClip = gltf.animations.reduce((a,b) => (b.duration > a.duration ? b : a), gltf.animations[0]);
-        clipDuration = refClip.duration;
         frameTimes = collectFrameTimesFromClip(refClip);
+        
+        if (frameTimes.length > MAX_FRAME) {
+          frameTimes = frameTimes.slice(0, MAX_FRAME);
+        }
+        
         currentFrameIndex = 0;
         currentTime = frameTimes[0] || 0;
         targetTime = currentTime;
         applyTime(currentTime);
-        setStatus(`${animatedCamera ? 'Camera GLB' : 'Camera fissa'}\nClip: ${gltf.animations.length}\nFrame: ${frameTimes.length}\nTime: ${currentTime.toFixed(4)}s`);
+        
+        setStatus(`${animatedCamera ? 'Camera GLB' : 'Camera fissa'}\nClip: ${gltf.animations.length}\nFrame: ${frameTimes.length}/${MAX_FRAME}\nTime: ${currentTime.toFixed(4)}s`);
       } else {
         mixer = null;
         setStatus(`${animatedCamera ? 'Camera trovata' : 'Nessuna camera'}\nNessuna animazione nel GLB`);
@@ -820,15 +1358,20 @@
     }, (xhr) => {
       if(xhr.total) setStatus(`Caricamento GLB: ${Math.round(xhr.loaded/xhr.total*100)}%`);
     }, (err) => {
-      console.error(err);
-      setStatus('Errore caricamento GLB');
+      console.error('Errore caricamento GLB:', err);
+      setStatus('Errore caricamento GLB - avvio con sole bollicine');
+      if (!sharedTexture) {
+        sharedTexture = defaultBubbleTexture || createGradientCircleTexture();
+      }
+      createParticles();
     });
     
-    // Scroll / touch frame advance
+    // Scroll / touch
     window.addEventListener('wheel', (e) => {
       e.preventDefault();
       if(!mixer || !frameTimes.length) return;
       stepFrame(e.deltaY > 0 ? 1 : -1);
+      onUserInteraction();
     }, { passive: false });
     
     let lastTouchY = 0, touchAccum = 0;
@@ -836,6 +1379,7 @@
       if(!e.touches.length) return;
       lastTouchY = e.touches[0].clientY;
       touchAccum = 0;
+      onUserInteraction();
     }, { passive: false });
     window.addEventListener('touchmove', (e) => {
       if(!e.touches.length) return;
@@ -849,6 +1393,7 @@
         touchAccum -= steps * thr;
         for(let i=0; i<Math.abs(steps); i++) stepFrame(steps > 0 ? 1 : -1);
       }
+      onUserInteraction();
     }, { passive: false });
     
     window.addEventListener('resize', () => {
@@ -858,6 +1403,8 @@
       renderCamera.updateProjectionMatrix();
     });
     
+    // Carica texture default e ambiente
+    loadDefaultBubbleTexture();
     loadInitialEnvironment();
     loadDefaultBackground();
     
@@ -868,11 +1415,15 @@
       if (delta <= 0) delta = 0.016;
       lastFrameTime = now;
       
-      if(mixer && frameTimes.length && currentTime !== targetTime) applyTime(targetTime);
-      else if(animatedCamera) updateRenderCameraFromGLB();
+      if(mixer && frameTimes.length && currentTime !== targetTime) {
+        applyTime(targetTime);
+      } else if(animatedCamera) {
+        updateRenderCameraFromGLB();
+      }
       
-      if (particleSystem && particleEnabled) updateParticles();
-      updateArmatureRotation(delta, currentFrameIndex);
+      if (particleEnabled) updateParticles();
+      updateArmatureRotation(delta);
+      applyOffset();
       
       renderPass.camera = renderCamera;
       composer.render();
@@ -882,12 +1433,10 @@
   })();
 </script>
 
-<!-- SFONDO IMMAGINE (sempre visibile) -->
+<!-- SFONDO E UI -->
 <div id="background-container">
   <img id="background-image" alt="background" style="display:block">
 </div>
-
-<!-- TUTTA LA UI (può essere nascosta con U) -->
 <div class="ui-elements">
   <div id="toggleUI">🎛️</div>
   <div id="uiPanel" class="ui-panel">
@@ -906,30 +1455,51 @@
     <hr>
     <div style="font-weight: bold; margin: 8px 0 4px 0;">✨ BOLLICINE D'ACQUA</div>
     <button id="particleToggle">✨ Bollicine: ON</button>
-    <label>🔢 Quantità <span id="particleCountVal" class="value-display">1500</span></label>
-    <input type="range" id="particleCount" min="100" max="8000" step="100" value="1500">
-    <label>📏 Grandezza <span id="particleSizeVal" class="value-display">0.07</span></label>
-    <input type="range" id="particleSize" min="0.02" max="0.8" step="0.01" value="0.07">
+    <label>🔢 Quantità <span id="particleCountVal" class="value-display">1200</span></label>
+    <input type="range" id="particleCount" min="100" max="3000" step="100" value="1200">
+    <label>📏 Grandezza <span id="particleSizeVal" class="value-display">0.05</span></label>
+    <input type="range" id="particleSize" min="0.02" max="0.8" step="0.01" value="0.05">
     <label>⏩ Velocità <span id="particleSpeedVal" class="value-display">0.14</span></label>
     <input type="range" id="particleSpeed" min="0.0" max="2.0" step="0.01" value="0.14">
-    <label>🎲 Randomicità <span id="particleRandomnessVal" class="value-display">0.60</span></label>
-    <input type="range" id="particleRandomness" min="0.0" max="1.5" step="0.01" value="0.60">
+    <label>🎲 Randomicità <span id="particleRandomnessVal" class="value-display">0.63</span></label>
+    <input type="range" id="particleRandomness" min="0.0" max="1.5" step="0.01" value="0.63">
     <label>🔘 Trasparenza <span id="particleOpacityVal" class="value-display">0.57</span></label>
     <input type="range" id="particleOpacity" min="0.0" max="1.0" step="0.01" value="0.57">
     <label>🎨 Colore <span id="particleColorVal" class="value-display">#39FBFE</span></label>
     <input type="color" id="particleColor" value="#39fbfe">
+    <div class="file-input-label" id="loadBubbleTextureBtn">📁 Carica texture bolle</div>
+    <button id="resetBubbleTextureBtn">↺ Reset texture predefinita</button>
     <hr>
-    <div style="font-weight: bold; margin: 8px 0 4px 0;">🔄 ROTAZIONE ARMONICA (sempre attiva)</div>
+    <div style="font-weight: bold; margin: 8px 0 4px 0;">🔄 ROTAZIONE INDIVIDUALE BOLICINE</div>
+    <label>⚡ Velocità rotazione <span id="bubbleRotSpeedVal" class="value-display">0.020</span></label>
+    <input type="range" id="bubbleRotSpeed" min="0" max="0.1" step="0.001" value="0.02">
+    <label>🎲 Randomicità rotazione <span id="bubbleRotRandomnessVal" class="value-display">0.010</span></label>
+    <input type="range" id="bubbleRotRandomness" min="0" max="0.05" step="0.001" value="0.01">
+    <hr>
+    <div style="font-weight: bold; margin: 8px 0 4px 0;">🔄 ROTAZIONE ARMONICA</div>
     <label><input type="checkbox" id="rotMasterToggle" checked> Attiva rotazione</label>
-    <label>📐 Rotazione X – Velocità <span id="rotXSpeedVal" class="value-display">0.65</span> | Ampiezza <span id="rotXAmplVal" class="value-display">0.028</span></label>
-    <input type="range" id="rotXSpeed" min="0.1" max="3.0" step="0.05" value="0.65">
-    <input type="range" id="rotXAmpl" min="0.0" max="0.8" step="0.001" value="0.028">
-    <label>📐 Rotazione Y – Velocità <span id="rotYSpeedVal" class="value-display">0.55</span> | Ampiezza <span id="rotYAmplVal" class="value-display">0.124</span></label>
-    <input type="range" id="rotYSpeed" min="0.1" max="3.0" step="0.05" value="0.55">
-    <input type="range" id="rotYAmpl" min="0.0" max="0.8" step="0.001" value="0.124">
-    <label>📐 Rotazione Z – Velocità <span id="rotZSpeedVal" class="value-display">0.55</span> | Ampiezza <span id="rotZAmplVal" class="value-display">0.121</span></label>
-    <input type="range" id="rotZSpeed" min="0.1" max="3.0" step="0.05" value="0.55">
-    <input type="range" id="rotZAmpl" min="0.0" max="0.8" step="0.001" value="0.121">
+    <label>📐 X – Vel <span id="rotXSpeedVal" class="value-display">0.65</span> | Amp <span id="rotXAmplVal" class="value-display">0.028</span></label>
+    <input type="range" id="rotXSpeed" min="0.1" max="3.0" step="0.05" value="0.65"><input type="range" id="rotXAmpl" min="0.0" max="0.8" step="0.001" value="0.028">
+    <label>📐 Y – Vel <span id="rotYSpeedVal" class="value-display">0.55</span> | Amp <span id="rotYAmplVal" class="value-display">0.124</span></label>
+    <input type="range" id="rotYSpeed" min="0.1" max="3.0" step="0.05" value="0.55"><input type="range" id="rotYAmpl" min="0.0" max="0.8" step="0.001" value="0.124">
+    <label>📐 Z – Vel <span id="rotZSpeedVal" class="value-display">0.55</span> | Amp <span id="rotZAmplVal" class="value-display">0.121</span></label>
+    <input type="range" id="rotZSpeed" min="0.1" max="3.0" step="0.05" value="0.55"><input type="range" id="rotZAmpl" min="0.0" max="0.8" step="0.001" value="0.121">
+    <hr>
+    <div style="font-weight: bold; margin: 8px 0 4px 0;">💡 LUCI DEL GLB</div>
+    <label><input type="checkbox" id="lightsGlobalToggle" checked> Attiva/Disattiva tutte</label>
+    <label>🔆 Intensità globale <span id="lightsGlobalIntensityVal" class="value-display">0.80</span></label>
+    <input type="range" id="lightsGlobalIntensity" min="0" max="2.5" step="0.01" value="0.8">
+    <div id="lightsContainer" style="margin-top: 8px;"></div>
+    <hr>
+    <div style="font-weight: bold; margin: 8px 0 4px 0;">🌍 AMBIENTE HDR</div>
+    <label><input type="checkbox" id="envToggle" checked> Attiva ambiente</label>
+    <label>💡 Intensità ambiente <span id="envIntensityVal" class="value-display">1.00</span></label>
+    <input type="range" id="envIntensity" min="0" max="2.5" step="0.01" value="1.0">
+    <hr>
+    <div style="font-weight: bold; margin: 8px 0 4px 0;">📐 OFFSET TELEcamera X (+6 cm)</div>
+    <label><input type="checkbox" id="offsetCheckbox"> Sposta a destra</label>
+    <button id="testOffsetBtn" style="background:#4a6a5c;">🔁 Test (2 sec)</button>
+    <div style="font-size: 11px; margin-top: 4px; color:#aaa;">Su smartphone attivo automaticamente.</div>
     <hr>
     <div style="font-weight: bold; margin: 8px 0 4px 0;">🖼️ SFONDO</div>
     <div class="file-input-label" id="loadBackgroundBtn">📁 Carica immagine sfondo</div>
