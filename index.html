@@ -74,6 +74,29 @@
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(8px); }
   }
+
+  /* Pulsante menu mobile (solo smartphone) */
+  #mobileMenuBtn {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(30,30,40,0.9);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: white;
+    font-size: 24px;
+    width: 48px;
+    height: 48px;
+    border-radius: 40px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 30;
+    touch-action: manipulation;
+  }
+  #mobileMenuBtn:active { transform: scale(0.94); background: rgba(50,50,70,0.9); }
+
   #toggleUI {
     position: fixed;
     bottom: 20px;
@@ -94,6 +117,7 @@
     touch-action: manipulation;
   }
   #toggleUI:active { transform: scale(0.94); background: rgba(50,50,70,0.9); }
+
   .ui-panel {
     position: fixed;
     bottom: 80px;
@@ -202,6 +226,7 @@
   @media (max-width: 600px) {
     .ui-panel { max-width: 280px; padding: 12px 14px; }
     #toggleUI { width: 42px; height: 42px; line-height: 42px; font-size: 22px; bottom: 16px; left: 16px; }
+    #mobileMenuBtn { width: 42px; height: 42px; font-size: 22px; top: 16px; right: 16px; display: flex !important; }
     .light-control { padding: 6px 8px; }
     #scrollHint { bottom: 20px; font-size: 28px; }
     #scrollHint .material-icons { font-size: 30px; }
@@ -231,6 +256,7 @@
 
     // UI elements
     const uiElements = document.querySelector('.ui-elements');
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
     const exposureSlider = document.getElementById('exposure');
     const exposureVal = document.getElementById('exposureVal');
     const bloomToggle = document.getElementById('bloomToggle');
@@ -476,7 +502,6 @@
     renderer.setClearColor(0x000000, 0);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
-    // SHADOW MAP DISABILITATA
     renderer.shadowMap.enabled = false;
     document.body.appendChild(renderer.domElement);
     
@@ -623,7 +648,6 @@
       root.traverse(obj => {
         if (obj.isLight) {
           allLights.push(obj);
-          // Disabilita ombre su tutte le luci
           obj.castShadow = false;
           
           const lightDiv = document.createElement('div');
@@ -1244,7 +1268,16 @@
     }, 5000);
     resetInactivityTimer();
     
-    // UI toggle con tasto U
+    // Pulsante menu mobile
+    if (isMobile) {
+      mobileMenuBtn.style.display = 'flex';
+      mobileMenuBtn.addEventListener('click', () => {
+        const uiVisible = uiElements.style.display !== 'block';
+        uiElements.style.display = uiVisible ? 'block' : 'none';
+      });
+    }
+    
+    // UI toggle con tasto U (desktop)
     let uiVisible = false;
     function toggleUI() {
       uiVisible = !uiVisible;
@@ -1282,7 +1315,6 @@
       gltfRoot.traverse(obj => {
         if(obj.isMesh) {
           obj.frustumCulled = false;
-          // Disabilita cast/receive shadow
           obj.castShadow = false;
           obj.receiveShadow = false;
           if(obj.material) obj.material.needsUpdate = true;
@@ -1436,6 +1468,10 @@
 <div id="background-container">
   <img id="background-image" alt="background" style="display:block">
 </div>
+
+<!-- Pulsante menu mobile (solo smartphone) -->
+<div id="mobileMenuBtn">☰</div>
+
 <div class="ui-elements">
   <div id="toggleUI">🎛️</div>
   <div id="uiPanel" class="ui-panel">
