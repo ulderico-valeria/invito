@@ -40,6 +40,10 @@
     height: 100%;
     display: block;
     z-index: 1;
+    touch-action: none;
+  }
+  canvas.zoom-enabled {
+    touch-action: auto;
   }
   .ui-elements {
     position: fixed;
@@ -284,10 +288,11 @@
     const loadBubbleTextureBtn = document.getElementById('loadBubbleTextureBtn');
     const resetBubbleTextureBtn = document.getElementById('resetBubbleTextureBtn');
 
-    // Nuovi toggle per effetti visivi
+    // Toggle effetti
     const shadowsToggle = document.getElementById('shadowsToggle');
     const envToggle = document.getElementById('envToggle');
     const lightsGlobalToggle = document.getElementById('lightsGlobalToggle');
+    const zoomToggle = document.getElementById('zoomToggle');
 
     const particleCountSlider = document.getElementById('particleCount');
     const particleCountVal = document.getElementById('particleCountVal');
@@ -335,6 +340,7 @@
     let composer = null;
     let bloomPass = null;
     let bloomEnabled = false;
+    let zoomEnabled = false;
     
     let particleSprites = [];
     let particlePositions = [];
@@ -354,7 +360,7 @@
     let targetResetRot = new THREE.Euler(0, 0, 0);
     let resetLerpSpeed = 0.08;
     
-    let offsetEnabled = false;
+    let offsetEnabled = false; // Disattivato di default
     let originalCameraPos = new THREE.Vector3();
     let testTimeout = null;
     
@@ -387,30 +393,45 @@
     
     // Variabili per movimento camera smooth (frame 45-65)
     let cameraSmoothOffset = 0;
-    let cameraTargetOffset = 0;
     
     const MAX_FRAME = 340;
     
-    // Carica texture bollicine default da asset/bubble_b.png
+    // Carica texture bollicine default da asset/bubble_b.webp
     function loadDefaultBubbleTexture() {
       const imgLoader = new THREE.TextureLoader();
-      imgLoader.load('./asset/bubble_b.png', 
+      imgLoader.load('./asset/bubble_b.webp', 
         (texture) => {
           defaultBubbleTexture = texture;
           if (!sharedTexture && !customBubbleTexture) {
             sharedTexture = defaultBubbleTexture;
             updateSharedTexture();
           }
-          setStatus('Texture bollicine caricata da asset/bubble_b.png');
+          setStatus('Texture bollicine caricata da asset/bubble_b.webp');
         },
         undefined,
         (err) => {
-          console.warn('Texture bubble_b.png non trovata, uso texture procedurale');
-          defaultBubbleTexture = createGradientCircleTexture();
-          if (!sharedTexture && !customBubbleTexture) {
-            sharedTexture = defaultBubbleTexture;
-            updateSharedTexture();
-          }
+          console.warn('Texture bubble_b.webp non trovata, provo PNG...');
+          // Fallback su PNG
+          const pngLoader = new THREE.TextureLoader();
+          pngLoader.load('./asset/bubble_b.png',
+            (texture) => {
+              defaultBubbleTexture = texture;
+              if (!sharedTexture && !customBubbleTexture) {
+                sharedTexture = defaultBubbleTexture;
+                updateSharedTexture();
+              }
+              setStatus('Texture bollicine caricata da asset/bubble_b.png');
+            },
+            undefined,
+            (err2) => {
+              console.warn('Texture bubble_b.png non trovata, uso texture procedurale');
+              defaultBubbleTexture = createGradientCircleTexture();
+              if (!sharedTexture && !customBubbleTexture) {
+                sharedTexture = defaultBubbleTexture;
+                updateSharedTexture();
+              }
+            }
+          );
         }
       );
     }
@@ -472,7 +493,7 @@
       if (defaultBubbleTexture) {
         sharedTexture = defaultBubbleTexture;
         updateSharedTexture();
-        setStatus('Texture bollicine reimpostata a bubble_b.png');
+        setStatus('Texture bollicine reimpostata a bubble_b.webp');
       }
     });
     
@@ -523,7 +544,7 @@
     renderer.setClearColor(0x000000, 0);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
-    renderer.shadowMap.enabled = false; // default disabilitato
+    renderer.shadowMap.enabled = false;
     document.body.appendChild(renderer.domElement);
     
     composer = new EffectComposer(renderer);
@@ -654,6 +675,23 @@
       updateEnvironmentVisibility();
     });
     envToggle.checked = true;
+    
+    // Toggle zoom
+    const canvas = document.querySelector('canvas');
+    zoomToggle.addEventListener('change', (e) => {
+      zoomEnabled = e.target.checked;
+      const viewport = document.querySelector('meta[name=viewport]');
+      if (zoomEnabled) {
+        viewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=2.0, user-scalable=yes, viewport-fit=cover';
+        if (canvas) canvas.classList.add('zoom-enabled');
+        setStatus('🔍 Zoom attivo (pinch per ingrandire)');
+      } else {
+        viewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
+        if (canvas) canvas.classList.remove('zoom-enabled');
+        setStatus('🔍 Zoom disattivato');
+      }
+    });
+    zoomToggle.checked = false;
     
     // Toggle luci globali
     lightsGlobalToggle.addEventListener('change', (e) => {
@@ -971,17 +1009,16 @@
       const quat = new THREE.Quaternion();
       animatedCamera.getWorldPosition(pos);
       animatedCamera.getWorldQuaternion(quat);
-      renderCamera.position.copy(pos);
-      renderCamera.quaternion.copy(quat);
       
-      // Applica offset smooth camera (frame 45-65)
+      // Calcola offset camera per frame 45-65 (-5cm su X)
       const frame = currentFrameIndex;
       let targetOffset = 0;
+      // Da frame 45 a 65: transizione graduale a -0.05
       if (frame >= 45 && frame <= 65) {
-        // Mappa 45-65 a 0-1
-        const t = (frame - 45) / 20;
-        // -5cm = -0.05 unità
-        targetOffset = -0.05 * t;
+        const t = (frame - 45) / 20; // 0 a 1
+        // Smoothstep per transizione più morbida
+        const smooth = t * t * (3 - 2 * t);
+        targetOffset = -0.05 * smooth;
       } else if (frame > 65) {
         targetOffset = -0.05;
       } else {
@@ -989,17 +1026,24 @@
       }
       
       // Smooth interpolation
-      cameraSmoothOffset += (targetOffset - cameraSmoothOffset) * 0.1;
+      cameraSmoothOffset += (targetOffset - cameraSmoothOffset) * 0.08;
       
-      // Applica offset sulla X
-      renderCamera.position.x += cameraSmoothOffset;
+      // Applica offset alla posizione della camera
+      const finalPos = pos.clone();
+      finalPos.x += cameraSmoothOffset;
       
+      // Aggiorna camera di rendering
+      renderCamera.position.copy(finalPos);
+      renderCamera.quaternion.copy(quat);
       renderCamera.fov = animatedCamera.fov || baseCameraFov;
       renderCamera.near = animatedCamera.near || baseCameraNear;
       renderCamera.far = animatedCamera.far || baseCameraFar;
       renderCamera.zoom = animatedCamera.zoom || 1;
       renderCamera.aspect = window.innerWidth / window.innerHeight;
       renderCamera.updateProjectionMatrix();
+      
+      // Salva posizione originale per offset checkbox
+      originalCameraPos.copy(finalPos);
     }
     
     function applyTime(time) {
@@ -1176,6 +1220,10 @@
     lightsGlobalIntensityVal.textContent = "0.80";
     lightsGlobalToggle.checked = true;
     
+    // Offset checkbox disattivato di default
+    offsetCheckbox.checked = false;
+    offsetEnabled = false;
+    
     particleCountSlider.addEventListener('input', () => {
       particleCountVal.textContent = particleCountSlider.value;
       rebuildParticles();
@@ -1238,15 +1286,15 @@
       }
     });
     
-    // Offset X
+    // Offset X (disattivato di default)
     function detectMobile() {
       return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
     }
     const isMobile = detectMobile();
     if (isMobile) {
-      offsetEnabled = true;
-      offsetCheckbox.checked = true;
-      setStatus("📱 Smartphone rilevato – offset X +6cm attivo");
+      offsetEnabled = false; // Disattivato di default
+      offsetCheckbox.checked = false;
+      setStatus("📱 Smartphone rilevato – offset X disattivato");
     } else {
       offsetEnabled = false;
       offsetCheckbox.checked = false;
@@ -1258,16 +1306,19 @@
     offsetCheckbox.addEventListener('change', (e) => {
       offsetEnabled = e.target.checked;
       applyOffset();
+      setStatus(offsetEnabled ? '📐 Offset X +6cm attivo' : '📐 Offset X disattivato');
     });
     testOffsetBtn.addEventListener('click', () => {
       if (testTimeout) clearTimeout(testTimeout);
       const wasEnabled = offsetEnabled;
       offsetEnabled = true;
       applyOffset();
+      setStatus('🔁 Test offset +6cm (2 secondi)');
       testTimeout = setTimeout(() => {
         offsetEnabled = wasEnabled;
         applyOffset();
         offsetCheckbox.checked = wasEnabled;
+        setStatus(wasEnabled ? '📐 Offset X +6cm attivo' : '📐 Offset X disattivato');
         testTimeout = null;
       }, 2000);
     });
@@ -1357,7 +1408,6 @@
     });
     
     // Blocca eventi touch sul canvas per non interferire con lo scroll UI
-    const canvas = document.querySelector('canvas');
     if (canvas) {
       canvas.addEventListener('touchstart', (e) => {
         if (uiElements.style.display === 'block') {
@@ -1607,10 +1657,11 @@
     <!-- Sezione Toggle On/Off per artefatti visivi -->
     <div style="background: rgba(255,0,0,0.1); border-radius: 12px; padding: 10px; margin-bottom: 8px; border: 1px solid rgba(255,100,100,0.3);">
       <div style="font-weight: bold; color: #ff8888; margin-bottom: 6px; font-size: 12px;">⚠️ DISATTIVA SU SMARTPHONE</div>
-      <label><input type="checkbox" id="shadowsToggle"> 🌓 Ombre (disattiva se lento)</label>
+      <label><input type="checkbox" id="shadowsToggle"> 🌓 Ombre</label>
       <label><input type="checkbox" id="envToggle" checked> 🌍 Ambiente HDR</label>
-      <label><input type="checkbox" id="bloomToggle"> Bloom (attiva/disattiva)</label>
+      <label><input type="checkbox" id="bloomToggle"> Bloom</label>
       <label><input type="checkbox" id="lightsGlobalToggle" checked> 💡 Luci GLB</label>
+      <label><input type="checkbox" id="zoomToggle"> 🔍 Zoom (pinch)</label>
     </div>
     
     <hr>
@@ -1672,7 +1723,7 @@
     <div style="font-weight: bold; margin: 8px 0 4px 0;">📐 OFFSET TELEcamera X (+6 cm)</div>
     <label><input type="checkbox" id="offsetCheckbox"> Sposta a destra</label>
     <button id="testOffsetBtn" style="background:#4a6a5c;">🔁 Test (2 sec)</button>
-    <div style="font-size: 11px; margin-top: 4px; color:#aaa;">Su smartphone attivo automaticamente.</div>
+    <div style="font-size: 11px; margin-top: 4px; color:#aaa;">Disattivato di default, attiva per test</div>
     <hr>
     <div style="font-weight: bold; margin: 8px 0 4px 0;">🖼️ SFONDO</div>
     <div class="file-input-label" id="loadBackgroundBtn">📁 Carica immagine sfondo</div>
