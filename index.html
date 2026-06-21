@@ -344,21 +344,21 @@
     
     const MAX_FRAME = 340;
     
-    // Carica texture bollicine default da asset/bubble_b.webp
+    // Carica texture bollicine default da asset/bubble_b.png
     function loadDefaultBubbleTexture() {
       const imgLoader = new THREE.TextureLoader();
-      imgLoader.load('./asset/bubble_b.webp', 
+      imgLoader.load('./asset/bubble_b.png', 
         (texture) => {
           defaultBubbleTexture = texture;
           if (!sharedTexture && !customBubbleTexture) {
             sharedTexture = defaultBubbleTexture;
             updateSharedTexture();
           }
-          setStatus('Texture bollicine caricata da asset/bubble_b.webp');
+          setStatus('Texture bollicine caricata da asset/bubble_b.png');
         },
         undefined,
         (err) => {
-          console.warn('Texture bubble_b.webp non trovata, uso texture procedurale');
+          console.warn('Texture bubble_b.png non trovata, uso texture procedurale');
           defaultBubbleTexture = createGradientCircleTexture();
           if (!sharedTexture && !customBubbleTexture) {
             sharedTexture = defaultBubbleTexture;
@@ -425,7 +425,7 @@
       if (defaultBubbleTexture) {
         sharedTexture = defaultBubbleTexture;
         updateSharedTexture();
-        setStatus('Texture bollicine reimpostata a bubble_b.webp');
+        setStatus('Texture bollicine reimpostata a bubble_b.png');
       }
     });
     
@@ -467,7 +467,7 @@
       resetBackgroundToDefault();
     });
     
-    // Setup Three.js
+    // Setup Three.js - SENZA OMBRE
     const scene = new THREE.Scene();
     scene.background = null;
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -476,8 +476,8 @@
     renderer.setClearColor(0x000000, 0);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // SHADOW MAP DISABILITATA
+    renderer.shadowMap.enabled = false;
     document.body.appendChild(renderer.domElement);
     
     composer = new EffectComposer(renderer);
@@ -609,13 +609,12 @@
     envActive = true;
     envToggle.checked = true;
     
-    // Luci GLB - con valori predefiniti aggiornati
+    // Luci GLB - SENZA OMBRE
     function collectAndCreateLightControls(root) {
       allLights = [];
       lightControls.clear();
       lightsContainer.innerHTML = '';
       
-      // Mappa per impostare valori predefiniti specifici per luce
       const defaultLightValues = {
         'spot': { intensity: 2.81, angle: 0.15, distance: 0, color: '#ffffff' },
         'spot001': { intensity: 1.01, angle: 0.48, distance: 0, color: '#ffffff' }
@@ -624,6 +623,9 @@
       root.traverse(obj => {
         if (obj.isLight) {
           allLights.push(obj);
+          // Disabilita ombre su tutte le luci
+          obj.castShadow = false;
+          
           const lightDiv = document.createElement('div');
           lightDiv.className = 'light-control';
           const name = obj.name || (obj.type === 'SpotLight' ? 'Spot' : obj.type);
@@ -632,7 +634,6 @@
           title.textContent = `🔆 ${name}`;
           lightDiv.appendChild(title);
           
-          // Applica valori predefiniti se la luce ha un nome nella mappa
           if (defaultLightValues[name]) {
             const vals = defaultLightValues[name];
             obj.intensity = vals.intensity;
@@ -816,7 +817,6 @@
           (Math.random() - 0.5) * 0.01
         ));
         
-        // ROTAZIONE INDIVIDUALE: ogni bolla ha velocità angolare diversa
         particleRotations.push(Math.random() * Math.PI * 2);
         let speed = baseRotSpeed + (Math.random() - 0.5) * rotRand * 2;
         speed = Math.max(0.001, Math.min(0.08, speed));
@@ -892,7 +892,6 @@
         particlePositions[i].set(newX, newY, newZ);
         particleSprites[i].position.copy(particlePositions[i]);
         
-        // ROTAZIONE INDIVIDUALE: ogni bolla ruota alla sua velocità
         particleRotations[i] += particleRotSpeeds[i];
         particleSprites[i].material.rotation = particleRotations[i];
       }
@@ -1097,7 +1096,6 @@
     bubbleRotRandomness.value = "0.01";
     bubbleRotRandomnessVal.textContent = "0.010";
     
-    // Intensità globale luci predefinita 0.80
     lightsGlobalIntensity.value = "0.80";
     lightsGlobalIntensityVal.textContent = "0.80";
     lightsGlobalToggle.checked = true;
@@ -1246,7 +1244,7 @@
     }, 5000);
     resetInactivityTimer();
     
-    // UI toggle con tasto U (rimosso pulsante mobile)
+    // UI toggle con tasto U
     let uiVisible = false;
     function toggleUI() {
       uiVisible = !uiVisible;
@@ -1284,8 +1282,9 @@
       gltfRoot.traverse(obj => {
         if(obj.isMesh) {
           obj.frustumCulled = false;
-          obj.castShadow = true;
-          obj.receiveShadow = true;
+          // Disabilita cast/receive shadow
+          obj.castShadow = false;
+          obj.receiveShadow = false;
           if(obj.material) obj.material.needsUpdate = true;
         }
       });
