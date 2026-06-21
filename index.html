@@ -284,6 +284,11 @@
     const loadBubbleTextureBtn = document.getElementById('loadBubbleTextureBtn');
     const resetBubbleTextureBtn = document.getElementById('resetBubbleTextureBtn');
 
+    // Nuovi toggle per effetti visivi
+    const shadowsToggle = document.getElementById('shadowsToggle');
+    const envToggle = document.getElementById('envToggle');
+    const lightsGlobalToggle = document.getElementById('lightsGlobalToggle');
+
     const particleCountSlider = document.getElementById('particleCount');
     const particleCountVal = document.getElementById('particleCountVal');
     const particleSizeSlider = document.getElementById('particleSize');
@@ -320,11 +325,9 @@
     const offsetCheckbox = document.getElementById('offsetCheckbox');
     const testOffsetBtn = document.getElementById('testOffsetBtn');
 
-    const lightsGlobalToggle = document.getElementById('lightsGlobalToggle');
     const lightsGlobalIntensity = document.getElementById('lightsGlobalIntensity');
     const lightsGlobalIntensityVal = document.getElementById('lightsGlobalIntensityVal');
     const lightsContainer = document.getElementById('lightsContainer');
-    const envToggle = document.getElementById('envToggle');
     const envIntensitySlider = document.getElementById('envIntensity');
     const envIntensityVal = document.getElementById('envIntensityVal');
 
@@ -381,6 +384,10 @@
     let baseCameraFov = 45;
     let baseCameraNear = 0.01;
     let baseCameraFar = 10000;
+    
+    // Variabili per movimento camera smooth (frame 45-65)
+    let cameraSmoothOffset = 0;
+    let cameraTargetOffset = 0;
     
     const MAX_FRAME = 340;
     
@@ -507,7 +514,7 @@
       resetBackgroundToDefault();
     });
     
-    // Setup Three.js - SENZA OMBRE
+    // Setup Three.js
     const scene = new THREE.Scene();
     scene.background = null;
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -516,7 +523,7 @@
     renderer.setClearColor(0x000000, 0);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
-    renderer.shadowMap.enabled = false;
+    renderer.shadowMap.enabled = false; // default disabilitato
     document.body.appendChild(renderer.domElement);
     
     composer = new EffectComposer(renderer);
@@ -634,10 +641,37 @@
     });
     bloomIntensity.disabled = true;
     
+    // Toggle ombre
+    shadowsToggle.addEventListener('change', (e) => {
+      renderer.shadowMap.enabled = e.target.checked;
+      setStatus(renderer.shadowMap.enabled ? '🌓 Ombre attivate' : '🌓 Ombre disattivate');
+    });
+    shadowsToggle.checked = false;
+    
+    // Toggle ambiente HDR
     envToggle.addEventListener('change', (e) => {
       envActive = e.target.checked;
       updateEnvironmentVisibility();
     });
+    envToggle.checked = true;
+    
+    // Toggle luci globali
+    lightsGlobalToggle.addEventListener('change', (e) => {
+      lightsGlobalActive = e.target.checked;
+      allLights.forEach(light => {
+        const ctrl = lightControls.get(light);
+        if (ctrl) {
+          ctrl.toggleCheck.checked = lightsGlobalActive;
+          if (lightsGlobalActive) {
+            light.intensity = ctrl.origIntensity * parseFloat(lightsGlobalIntensity.value);
+            if (ctrl.intensitySlider) ctrl.intensitySlider.value = light.intensity;
+          } else {
+            light.intensity = 0;
+          }
+        }
+      });
+    });
+    
     envIntensitySlider.addEventListener('input', () => {
       currentEnvIntensity = parseFloat(envIntensitySlider.value);
       envIntensityVal.textContent = currentEnvIntensity.toFixed(2);
@@ -645,10 +679,8 @@
     });
     envIntensitySlider.value = "1.0";
     envIntensityVal.textContent = "1.00";
-    envActive = true;
-    envToggle.checked = true;
     
-    // Luci GLB - SENZA OMBRE
+    // Luci GLB
     function collectAndCreateLightControls(root) {
       allLights = [];
       lightControls.clear();
@@ -793,21 +825,6 @@
           if (ctrl && ctrl.toggleCheck.checked) {
             light.intensity = ctrl.origIntensity * mult;
             if (ctrl.intensitySlider) ctrl.intensitySlider.value = light.intensity;
-          }
-        });
-      });
-      lightsGlobalToggle.addEventListener('change', (e) => {
-        lightsGlobalActive = e.target.checked;
-        allLights.forEach(light => {
-          const ctrl = lightControls.get(light);
-          if (ctrl) {
-            ctrl.toggleCheck.checked = lightsGlobalActive;
-            if (lightsGlobalActive) {
-              light.intensity = ctrl.origIntensity * parseFloat(lightsGlobalIntensity.value);
-              if (ctrl.intensitySlider) ctrl.intensitySlider.value = light.intensity;
-            } else {
-              light.intensity = 0;
-            }
           }
         });
       });
@@ -956,6 +973,27 @@
       animatedCamera.getWorldQuaternion(quat);
       renderCamera.position.copy(pos);
       renderCamera.quaternion.copy(quat);
+      
+      // Applica offset smooth camera (frame 45-65)
+      const frame = currentFrameIndex;
+      let targetOffset = 0;
+      if (frame >= 45 && frame <= 65) {
+        // Mappa 45-65 a 0-1
+        const t = (frame - 45) / 20;
+        // -5cm = -0.05 unità
+        targetOffset = -0.05 * t;
+      } else if (frame > 65) {
+        targetOffset = -0.05;
+      } else {
+        targetOffset = 0;
+      }
+      
+      // Smooth interpolation
+      cameraSmoothOffset += (targetOffset - cameraSmoothOffset) * 0.1;
+      
+      // Applica offset sulla X
+      renderCamera.position.x += cameraSmoothOffset;
+      
       renderCamera.fov = animatedCamera.fov || baseCameraFov;
       renderCamera.near = animatedCamera.near || baseCameraNear;
       renderCamera.far = animatedCamera.far || baseCameraFar;
@@ -1291,7 +1329,6 @@
         const isVisible = uiElements.style.display !== 'none';
         uiElements.style.display = isVisible ? 'none' : 'block';
         if (!isVisible) {
-          // Forza il layout per lo scroll
           setTimeout(() => {
             panel.scrollTop = 0;
           }, 50);
@@ -1323,18 +1360,15 @@
     const canvas = document.querySelector('canvas');
     if (canvas) {
       canvas.addEventListener('touchstart', (e) => {
-        // Se il pannello UI è aperto, non bloccare lo scroll
         if (uiElements.style.display === 'block') {
           const panel = document.querySelector('.ui-panel');
           const touch = e.touches[0];
           const rect = panel.getBoundingClientRect();
-          // Se il tocco è dentro il pannello, lascia che scrolli
           if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
               touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
             return;
           }
         }
-        // Altrimenti blocca il comportamento predefinito per lo scrubbing
         e.preventDefault();
       }, { passive: false });
     }
@@ -1446,10 +1480,7 @@
     });
     
     // Scroll / touch per frame scrubbing
-    let isScrollingUI = false;
-    
     window.addEventListener('wheel', (e) => {
-      // Se il pannello UI è aperto, controlla se lo scroll è su di esso
       if (uiElements.style.display === 'block') {
         const panel = document.querySelector('.ui-panel');
         const rect = panel.getBoundingClientRect();
@@ -1457,7 +1488,6 @@
         const mouseY = e.clientY;
         if (mouseX >= rect.left && mouseX <= rect.right &&
             mouseY >= rect.top && mouseY <= rect.bottom) {
-          // Lascia che lo scroll funzioni sul pannello
           return;
         }
       }
@@ -1468,13 +1498,11 @@
     }, { passive: false });
     
     let lastTouchY = 0, touchAccum = 0;
-    let touchStartY = 0;
     let isTouchOnPanel = false;
     
     window.addEventListener('touchstart', (e) => {
       if(!e.touches.length) return;
       
-      // Controlla se il tocco è sul pannello UI
       if (uiElements.style.display === 'block') {
         const panel = document.querySelector('.ui-panel');
         const rect = panel.getBoundingClientRect();
@@ -1482,7 +1510,6 @@
         if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
             touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
           isTouchOnPanel = true;
-          // Lascia che il pannello gestisca lo scroll
           return;
         }
       }
@@ -1490,19 +1517,16 @@
       isTouchOnPanel = false;
       lastTouchY = e.touches[0].clientY;
       touchAccum = 0;
-      touchStartY = e.touches[0].clientY;
       onUserInteraction();
     }, { passive: true });
     
     window.addEventListener('touchmove', (e) => {
       if(!e.touches.length) return;
       
-      // Se il tocco è sul pannello, lascia che scrolli
       if (isTouchOnPanel) {
         return;
       }
       
-      // Se il pannello è aperto e il tocco non è su di esso, blocca
       if (uiElements.style.display === 'block') {
         const panel = document.querySelector('.ui-panel');
         const rect = panel.getBoundingClientRect();
@@ -1579,6 +1603,17 @@
   <div id="toggleUI">🎛️</div>
   <div id="uiPanel" class="ui-panel">
     <div style="font-weight: bold; margin-bottom: 6px;">🎨 CONTROLLI FX</div>
+    
+    <!-- Sezione Toggle On/Off per artefatti visivi -->
+    <div style="background: rgba(255,0,0,0.1); border-radius: 12px; padding: 10px; margin-bottom: 8px; border: 1px solid rgba(255,100,100,0.3);">
+      <div style="font-weight: bold; color: #ff8888; margin-bottom: 6px; font-size: 12px;">⚠️ DISATTIVA SU SMARTPHONE</div>
+      <label><input type="checkbox" id="shadowsToggle"> 🌓 Ombre (disattiva se lento)</label>
+      <label><input type="checkbox" id="envToggle" checked> 🌍 Ambiente HDR</label>
+      <label><input type="checkbox" id="bloomToggle"> Bloom (attiva/disattiva)</label>
+      <label><input type="checkbox" id="lightsGlobalToggle" checked> 💡 Luci GLB</label>
+    </div>
+    
+    <hr>
     <label>🌞 Esposizione <span id="exposureVal" class="value-display">1.00</span></label>
     <input type="range" id="exposure" min="0.2" max="2.0" step="0.01" value="1.0">
     <label>🔄 Rotazione HDR <span id="rotVal" class="value-display">0.00</span></label>
