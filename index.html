@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
 <style>
+  /* RESET */
   html, body {
     margin: 0;
     width: 100%;
@@ -16,6 +17,39 @@
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     touch-action: none;
   }
+
+  /* LOADER */
+  #loader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #1a3a4a; /* blu petrolio */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    transition: opacity 0.6s ease;
+  }
+  #loader.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(255,255,255,0.1);
+    border-top: 4px solid #ffffff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  /* SFONDO */
   #background-container {
     position: fixed;
     top: 0;
@@ -32,6 +66,8 @@
     object-fit: cover;
     object-position: center;
   }
+
+  /* CANVAS */
   canvas {
     position: fixed;
     top: 0;
@@ -41,7 +77,10 @@
     display: block;
     z-index: 1;
     touch-action: none;
+    user-select: none;
   }
+
+  /* UI */
   .ui-elements {
     position: fixed;
     top: 0;
@@ -54,6 +93,7 @@
   .ui-elements > * {
     pointer-events: auto;
   }
+
   #scrollHint {
     position: fixed;
     bottom: 30px;
@@ -409,7 +449,7 @@
     let currentEnvIntensity = 1.0;
     let envMapRef = null;
     
-    // SCROLL HINT – sempre visibile, gestito per evitare errori
+    // SCROLL HINT – sempre visibile
     let scrollHint = document.getElementById('scrollHint');
     if (!scrollHint) {
         scrollHint = document.createElement('div');
@@ -441,8 +481,8 @@
     let currentFPS = 0;
     let debugVisible = false;
 
-    // VARIABILI PER PINCH ZOOM
-    let zoomOffset = 0;
+    // VARIABILI PER PINCH ZOOM (usando camera.zoom)
+    let pinchZoomFactor = 1.0;
     let prevPinchDist = 0;
     let isTouchOnPanel = false;
     
@@ -657,6 +697,7 @@
     
     renderCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 10000);
     renderCamera.position.set(0, 0, 5);
+    renderCamera.zoom = 1; // default
     
     let pmremGen = new THREE.PMREMGenerator(renderer);
     pmremGen.compileEquirectangularShader();
@@ -1153,15 +1194,13 @@
       renderCamera.fov = animatedCamera.fov || baseCameraFov;
       renderCamera.near = animatedCamera.near || baseCameraNear;
       renderCamera.far = animatedCamera.far || baseCameraFar;
-      renderCamera.zoom = animatedCamera.zoom || 1;
+      
+      // IMPORTANTE: applica lo zoom moltiplicativo
+      const baseZoom = animatedCamera.zoom || 1;
+      renderCamera.zoom = baseZoom * pinchZoomFactor;
+      
       renderCamera.aspect = window.innerWidth / window.innerHeight;
       renderCamera.updateProjectionMatrix();
-      
-      // APPLICA PINCH ZOOM OFFSET
-      if (zoomOffset !== 0) {
-        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(renderCamera.quaternion);
-        renderCamera.position.add(forward.clone().multiplyScalar(zoomOffset));
-      }
       
       originalCameraPos.copy(finalPos);
     }
@@ -1471,7 +1510,7 @@
       }
     });
     
-    // Gestione Touch: scrub con 1 dito, pinch con 2 dita
+    // Gestione Touch: scrub con 1 dito, pinch con 2 dita (ZOOM con camera.zoom)
     let touchStartY = 0;
     let touchAccum = 0;
 
@@ -1489,16 +1528,15 @@
       }
       isTouchOnPanel = false;
 
-      // Se ci sono 2 dita, attiva pinch e blocca il comportamento nativo
       if (e.touches.length === 2) {
+        // PINCH: salva la distanza iniziale
         e.preventDefault();
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
-        prevPinchDist = Math.sqrt(dx*dx + dy*dy);
-        // Reset accumulatore scrub
-        touchAccum = 0;
+        prevPinchDist = Math.hypot(dx, dy);
+        touchAccum = 0; // resetta scrub
       } else if (e.touches.length === 1) {
-        // Scrub con una dita
+        // SCRUB: una dita
         touchStartY = e.touches[0].clientY;
         touchAccum = 0;
       }
@@ -1507,21 +1545,24 @@
     window.addEventListener('touchmove', (e) => {
       if (isTouchOnPanel) return;
 
-      // Se ci sono 2 dita -> PINCH
       if (e.touches.length === 2) {
+        // PINCH ZOOM
         e.preventDefault();
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-        const delta = dist - prevPinchDist;
-        zoomOffset += delta * 0.01;
-        zoomOffset = Math.max(-5, Math.min(5, zoomOffset));
-        prevPinchDist = dist;
+        const currentDist = Math.hypot(dx, dy);
+        
+        // Il rapporto è il fattore di scala da applicare
+        const ratio = currentDist / prevPinchDist;
+        pinchZoomFactor *= ratio;
+        pinchZoomFactor = Math.max(0.5, Math.min(3.0, pinchZoomFactor));
+        
+        prevPinchDist = currentDist;
         return;
       }
 
-      // Se c'è 1 dita -> SCRUB (frame stepping)
       if (e.touches.length === 1) {
+        // SCRUB – frame stepping
         const delta = touchStartY - e.touches[0].clientY;
         touchStartY = e.touches[0].clientY;
         touchAccum += delta;
@@ -1566,6 +1607,18 @@
       renderCamera.updateProjectionMatrix();
     });
     
+    // LOADER: lo nascondiamo quando il GLB è caricato (o dopo 10s in caso di errore)
+    const loaderEl = document.getElementById('loader');
+    let loaderHidden = false;
+    function hideLoader() {
+      if (loaderHidden) return;
+      loaderHidden = true;
+      if (loaderEl) loaderEl.classList.add('hidden');
+    }
+
+    // Timeout di sicurezza: nascondi loader dopo 10 secondi anche se il GLB non è caricato
+    setTimeout(hideLoader, 10000);
+
     const loader = new GLTFLoader();
     
     loader.load('./invito.glb', (gltf) => {
@@ -1660,6 +1713,10 @@
       }
       
       createParticles();
+      
+      // Nascondi loader dopo il caricamento
+      hideLoader();
+      
     }, (xhr) => {
       if(xhr.total) setStatus(`Caricamento GLB: ${Math.round(xhr.loaded/xhr.total*100)}%`);
     }, (err) => {
@@ -1669,6 +1726,7 @@
         sharedTexture = defaultBubbleTexture || createGradientCircleTexture();
       }
       createParticles();
+      hideLoader(); // nascondi comunque dopo errore
     });
     
     loadDefaultBubbleTexture();
@@ -1721,6 +1779,11 @@
     animate();
   })();
 </script>
+
+<!-- LOADER -->
+<div id="loader">
+  <div class="spinner"></div>
+</div>
 
 <!-- SFONDO E UI -->
 <div id="background-container">
