@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>GLB Frame Scrubber - Versione Finale</title>
+<title>GLB Frame Scrubber - Versione Finale + Debug</title>
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
 <style>
@@ -224,6 +224,27 @@
     color: white;
     pointer-events: none;
   }
+  /* Overlay debug */
+  #debugOverlay {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    background: rgba(0,0,0,0.8);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 11px;
+    color: #0f0;
+    z-index: 35;
+    pointer-events: none;
+    display: none;
+    line-height: 1.4;
+    min-width: 140px;
+    text-align: right;
+  }
+  #debugOverlay.show {
+    display: block;
+  }
 
   @media (max-width: 600px) {
     .ui-panel { 
@@ -286,6 +307,9 @@
     const shadowsToggle = document.getElementById('shadowsToggle');
     const envToggle = document.getElementById('envToggle');
     const lightsGlobalToggle = document.getElementById('lightsGlobalToggle');
+    const forcePixelRatioToggle = document.getElementById('forcePixelRatioToggle');
+    const debugToggle = document.getElementById('debugToggle');
+    const debugOverlay = document.getElementById('debugOverlay');
 
     const particleCountSlider = document.getElementById('particleCount');
     const particleCountVal = document.getElementById('particleCountVal');
@@ -385,6 +409,12 @@
     let cameraSmoothOffset = 0;
     const CAMERA_OFFSET_TARGET = -0.01;
     const MAX_FRAME = 340;
+    
+    // Debug variabili
+    let frameCount = 0;
+    let fpsTime = 0;
+    let currentFPS = 0;
+    let debugVisible = false;
     
     // Carica texture bollicine default da asset/bubble_b.webp
     function loadDefaultBubbleTexture() {
@@ -526,7 +556,8 @@
     const scene = new THREE.Scene();
     scene.background = null;
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(window.devicePixelRatio || 1);
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    renderer.setPixelRatio(devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setClearColor(0x000000, 0);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -684,6 +715,35 @@
     });
     envIntensitySlider.value = "1.0";
     envIntensityVal.textContent = "1.00";
+    
+    // Force Pixel Ratio toggle
+    forcePixelRatioToggle.addEventListener('change', (e) => {
+      const force = e.target.checked;
+      if (force) {
+        renderer.setPixelRatio(1);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        composer.setSize(window.innerWidth, window.innerHeight);
+        setStatus('🔧 Pixel ratio forzato a 1');
+      } else {
+        renderer.setPixelRatio(devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        composer.setSize(window.innerWidth, window.innerHeight);
+        setStatus(`🔧 Pixel ratio ripristinato a ${devicePixelRatio}`);
+      }
+    });
+    forcePixelRatioToggle.checked = false;
+    
+    // Debug toggle
+    debugToggle.addEventListener('change', (e) => {
+      debugVisible = e.target.checked;
+      debugOverlay.classList.toggle('show', debugVisible);
+      if (debugVisible) {
+        setStatus('🐞 Debug attivo');
+      } else {
+        setStatus('🐞 Debug disattivato');
+      }
+    });
+    debugToggle.checked = false;
     
     function collectAndCreateLightControls(root) {
       allLights = [];
@@ -1174,9 +1234,6 @@
     lightsGlobalIntensityVal.textContent = "0.80";
     lightsGlobalToggle.checked = true;
     
-    offsetCheckbox.checked = false;
-    offsetEnabled = false;
-    
     particleCountSlider.addEventListener('input', () => {
       particleCountVal.textContent = particleCountSlider.value;
       rebuildParticles();
@@ -1243,34 +1300,37 @@
       return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
     }
     const isMobile = detectMobile();
+    
+    // OFFSET: attivo su smartphone con 5 cm (0.05)
     if (isMobile) {
-      offsetEnabled = false;
-      offsetCheckbox.checked = false;
-      setStatus("📱 Smartphone rilevato – offset X disattivato");
+      offsetEnabled = true;
+      offsetCheckbox.checked = true;
+      setStatus("📱 Smartphone rilevato – offset X +5cm attivo");
     } else {
       offsetEnabled = false;
       offsetCheckbox.checked = false;
     }
+    
     function applyOffset() {
-      if (offsetEnabled) renderCamera.position.x = originalCameraPos.x + 0.06;
+      if (offsetEnabled) renderCamera.position.x = originalCameraPos.x + 0.05;
       else renderCamera.position.x = originalCameraPos.x;
     }
     offsetCheckbox.addEventListener('change', (e) => {
       offsetEnabled = e.target.checked;
       applyOffset();
-      setStatus(offsetEnabled ? '📐 Offset X +6cm attivo' : '📐 Offset X disattivato');
+      setStatus(offsetEnabled ? '📐 Offset X +5cm attivo' : '📐 Offset X disattivato');
     });
     testOffsetBtn.addEventListener('click', () => {
       if (testTimeout) clearTimeout(testTimeout);
       const wasEnabled = offsetEnabled;
       offsetEnabled = true;
       applyOffset();
-      setStatus('🔁 Test offset +6cm (2 secondi)');
+      setStatus('🔁 Test offset +5cm (2 secondi)');
       testTimeout = setTimeout(() => {
         offsetEnabled = wasEnabled;
         applyOffset();
         offsetCheckbox.checked = wasEnabled;
-        setStatus(wasEnabled ? '📐 Offset X +6cm attivo' : '📐 Offset X disattivato');
+        setStatus(wasEnabled ? '📐 Offset X +5cm attivo' : '📐 Offset X disattivato');
         testTimeout = null;
       }, 2000);
     });
@@ -1413,7 +1473,6 @@
       isTouchOnPanel = false;
     });
     
-    // Wheel scroll
     window.addEventListener('wheel', (e) => {
       if (uiElements.style.display === 'block') {
         const panel = document.querySelector('.ui-panel');
@@ -1554,6 +1613,24 @@
       if (delta <= 0) delta = 0.016;
       lastFrameTime = now;
       
+      // Aggiorna FPS
+      frameCount++;
+      fpsTime += delta;
+      if (fpsTime >= 0.5) {
+        currentFPS = Math.round(frameCount / fpsTime);
+        frameCount = 0;
+        fpsTime = 0;
+        if (debugVisible) {
+          const pr = forcePixelRatioToggle.checked ? 1 : devicePixelRatio;
+          debugOverlay.innerHTML = `
+            FPS: ${currentFPS}<br>
+            Pixel ratio: ${pr}<br>
+            Canvas: ${renderer.domElement.width}×${renderer.domElement.height}<br>
+            Frame: ${currentFrameIndex+1}/${frameTimes.length}
+          `;
+        }
+      }
+      
       if(mixer && frameTimes.length && currentTime !== targetTime) {
         applyTime(targetTime);
       } else if(animatedCamera) {
@@ -1578,6 +1655,9 @@
 </div>
 
 <div id="mobileMenuBtn">☰</div>
+
+<!-- Debug overlay -->
+<div id="debugOverlay">FPS: --<br>Pixel ratio: --<br>Canvas: --x--</div>
 
 <div class="ui-elements">
   <div id="toggleUI">🎛️</div>
@@ -1648,10 +1728,15 @@
     <label>💡 Intensità ambiente <span id="envIntensityVal" class="value-display">1.00</span></label>
     <input type="range" id="envIntensity" min="0" max="2.5" step="0.01" value="1.0">
     <hr>
-    <div style="font-weight: bold; margin: 8px 0 4px 0;">📐 OFFSET TELEcamera X (+6 cm)</div>
+    <div style="font-weight: bold; margin: 8px 0 4px 0;">📐 OFFSET TELEcamera X (+5 cm)</div>
     <label><input type="checkbox" id="offsetCheckbox"> Sposta a destra</label>
     <button id="testOffsetBtn" style="background:#4a6a5c;">🔁 Test (2 sec)</button>
-    <div style="font-size: 11px; margin-top: 4px; color:#aaa;">Disattivato di default, attiva per test</div>
+    <div style="font-size: 11px; margin-top: 4px; color:#aaa;">Su smartphone attivo automaticamente.</div>
+    <hr>
+    <div style="font-weight: bold; margin: 8px 0 4px 0;">🐞 DEBUG</div>
+    <label><input type="checkbox" id="debugToggle"> Mostra FPS / informazioni</label>
+    <label><input type="checkbox" id="forcePixelRatioToggle"> Forza pixel ratio = 1</label>
+    <div style="font-size: 11px; margin-top: 4px; color:#aaa;">Se la qualità è bassa, prova a forzare pixel ratio = 1</div>
     <hr>
     <div style="font-weight: bold; margin: 8px 0 4px 0;">🖼️ SFONDO</div>
     <div class="file-input-label" id="loadBackgroundBtn">📁 Carica immagine sfondo</div>
