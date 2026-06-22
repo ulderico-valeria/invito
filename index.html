@@ -467,11 +467,9 @@
 
     // Funzione per applicare le impostazioni di qualità SENZA ricreare il renderer
     function applyQualitySettings() {
-      // Pixel ratio
       const pr = parseFloat(pixelRatioSelect.value);
       renderer.setPixelRatio(pr === 0 ? window.devicePixelRatio || 1 : pr);
       
-      // Tone mapping
       const toneMapOptions = {
         0: THREE.NoToneMapping,
         1: THREE.LinearToneMapping,
@@ -480,16 +478,10 @@
       renderer.toneMapping = toneMapOptions[parseInt(toneMappingSelect.value)] || THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = parseFloat(exposureSlider.value);
       
-      // Output encoding
       renderer.outputEncoding = outputEncodingToggle.checked ? THREE.sRGBEncoding : THREE.LinearEncoding;
       
-      // Ombre
       renderer.shadowMap.enabled = shadowsToggle.checked;
       applyShadowQuality();
-      
-      // Nota: l'antialiasing non può essere cambiato a runtime senza ricreare il renderer.
-      // Ignoriamo il toggle aaToggle per evitare problemi.
-      // Se si vuole cambiare, serve ricaricare la pagina.
       
       setStatus('✅ Impostazioni qualità applicate (AA richiede ricarica)');
     }
@@ -826,7 +818,6 @@
     // Applica impostazioni SENZA ricreare il renderer
     applySettingsBtn.addEventListener('click', () => {
       applyQualitySettings();
-      // Aggiorna viewport
       renderCamera.aspect = window.innerWidth / window.innerHeight;
       renderCamera.updateProjectionMatrix();
     });
@@ -841,9 +832,10 @@
       lightControls.clear();
       lightsContainer.innerHTML = '';
       
+      // VALORI PREDEFINITI AGGIORNATI SECONDO RICHIESTA
       const defaultLightValues = {
-        'spot': { intensity: 2.81, angle: 0.15, distance: 0, color: '#ffffff' },
-        'spot001': { intensity: 1.01, angle: 0.48, distance: 0, color: '#ffffff' }
+        'spot': { intensity: 1.03, angle: 0.32, distance: 12.0, color: '#ffffff' },
+        'spot001': { intensity: 1.01, angle: 0.48, distance: 0.0, color: '#ffffff' }
       };
       
       root.traverse(obj => {
