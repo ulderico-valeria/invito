@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>GLB Frame Scrubber - Versione Finale + Debug</title>
+<title>GLB Frame Scrubber - Debug Qualità</title>
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
 <style>
@@ -157,6 +157,15 @@
     margin-right: 10px;
     accent-color: #4a9eff;
   }
+  .ui-panel select {
+    width: 100%;
+    padding: 6px;
+    background: #2c2c38;
+    border: none;
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+  }
   .ui-panel input[type="color"] {
     width: 40px;
     height: 40px;
@@ -224,7 +233,6 @@
     color: white;
     pointer-events: none;
   }
-  /* Overlay debug */
   #debugOverlay {
     position: fixed;
     top: 16px;
@@ -307,9 +315,15 @@
     const shadowsToggle = document.getElementById('shadowsToggle');
     const envToggle = document.getElementById('envToggle');
     const lightsGlobalToggle = document.getElementById('lightsGlobalToggle');
-    const forcePixelRatioToggle = document.getElementById('forcePixelRatioToggle');
-    const debugToggle = document.getElementById('debugToggle');
+    
+    // Debug qualità
+    const aaToggle = document.getElementById('aaToggle');
+    const pixelRatioSelect = document.getElementById('pixelRatioSelect');
+    const toneMappingSelect = document.getElementById('toneMappingSelect');
+    const outputEncodingToggle = document.getElementById('outputEncodingToggle');
+    const debugOverlayToggle = document.getElementById('debugOverlayToggle');
     const debugOverlay = document.getElementById('debugOverlay');
+    const applySettingsBtn = document.getElementById('applySettingsBtn');
 
     const particleCountSlider = document.getElementById('particleCount');
     const particleCountVal = document.getElementById('particleCountVal');
@@ -410,11 +424,81 @@
     const CAMERA_OFFSET_TARGET = -0.01;
     const MAX_FRAME = 340;
     
-    // Debug variabili
+    // Riferimenti a renderer e scene per le modifiche
+    let scene, renderer, renderCamera;
     let frameCount = 0;
     let fpsTime = 0;
     let currentFPS = 0;
     let debugVisible = false;
+    
+    // Funzione per ricreare il renderer con le impostazioni correnti
+    function rebuildRenderer() {
+      const aa = aaToggle.checked;
+      const pixelRatio = parseFloat(pixelRatioSelect.value);
+      const toneMapping = parseInt(toneMappingSelect.value);
+      const sRGB = outputEncodingToggle.checked;
+      
+      // Rimuovi il vecchio renderer
+      if (renderer) {
+        renderer.domElement.remove();
+        renderer.dispose();
+      }
+      
+      // Crea nuovo renderer
+      renderer = new THREE.WebGLRenderer({
+        antialias: aa,
+        alpha: true
+      });
+      renderer.setPixelRatio(pixelRatio === 0 ? window.devicePixelRatio || 1 : pixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setClearColor(0x000000, 0);
+      
+      // Tone mapping
+      const toneMapOptions = {
+        0: THREE.NoToneMapping,
+        1: THREE.LinearToneMapping,
+        2: THREE.ACESFilmicToneMapping
+      };
+      renderer.toneMapping = toneMapOptions[toneMapping] || THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = parseFloat(exposureSlider.value);
+      
+      // Output encoding
+      if (sRGB) {
+        renderer.outputEncoding = THREE.sRGBEncoding;
+      } else {
+        renderer.outputEncoding = THREE.LinearEncoding;
+      }
+      
+      renderer.shadowMap.enabled = shadowsToggle.checked;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      
+      // Inserisci nel DOM
+      document.body.appendChild(renderer.domElement);
+      
+      // Aggiorna composer
+      if (composer) {
+        composer.setRenderer(renderer);
+        composer.setSize(window.innerWidth, window.innerHeight);
+      }
+      
+      // Aggiorna PMREM generator
+      if (pmremGen) {
+        pmremGen.dispose();
+        pmremGen = new THREE.PMREMGenerator(renderer);
+        pmremGen.compileEquirectangularShader();
+        // Ricarica environment se presente
+        if (currentEnvTexture) {
+          const newEnvMap = pmremGen.fromEquirectangular(currentEnvTexture).texture;
+          envMapRef = newEnvMap;
+          if (envActive) {
+            scene.environment = newEnvMap;
+            scene.environment.intensity = currentEnvIntensity;
+          }
+        }
+      }
+      
+      setStatus(`✅ Renderer ricreato: AA=${aa}, PR=${pixelRatio===0?'auto':pixelRatio}, TM=${toneMapping}, sRGB=${sRGB}`);
+    }
     
     // Carica texture bollicine default da asset/bubble_b.webp
     function loadDefaultBubbleTexture() {
@@ -552,17 +636,17 @@
       resetBackgroundToDefault();
     });
     
-    // Setup Three.js
-    const scene = new THREE.Scene();
+    // Inizializzazione scene e renderer
+    scene = new THREE.Scene();
     scene.background = null;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    const devicePixelRatio = window.devicePixelRatio || 1;
-    renderer.setPixelRatio(devicePixelRatio);
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setClearColor(0x000000, 0);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
     renderer.shadowMap.enabled = false;
+    renderer.outputEncoding = THREE.sRGBEncoding;
     document.body.appendChild(renderer.domElement);
     
     composer = new EffectComposer(renderer);
@@ -575,10 +659,10 @@
     composer.addPass(bloomPass);
     bloomPass.enabled = false;
     
-    const renderCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 10000);
+    renderCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 10000);
     renderCamera.position.set(0, 0, 5);
     
-    const pmremGen = new THREE.PMREMGenerator(renderer);
+    let pmremGen = new THREE.PMREMGenerator(renderer);
     pmremGen.compileEquirectangularShader();
     
     // Funzioni ambiente
@@ -680,6 +764,7 @@
     });
     bloomIntensity.disabled = true;
     
+    // Toggle ombre
     shadowsToggle.addEventListener('change', (e) => {
       renderer.shadowMap.enabled = e.target.checked;
       setStatus(renderer.shadowMap.enabled ? '🌓 Ombre attivate' : '🌓 Ombre disattivate');
@@ -716,34 +801,25 @@
     envIntensitySlider.value = "1.0";
     envIntensityVal.textContent = "1.00";
     
-    // Force Pixel Ratio toggle
-    forcePixelRatioToggle.addEventListener('change', (e) => {
-      const force = e.target.checked;
-      if (force) {
-        renderer.setPixelRatio(1);
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        composer.setSize(window.innerWidth, window.innerHeight);
-        setStatus('🔧 Pixel ratio forzato a 1');
-      } else {
-        renderer.setPixelRatio(devicePixelRatio);
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        composer.setSize(window.innerWidth, window.innerHeight);
-        setStatus(`🔧 Pixel ratio ripristinato a ${devicePixelRatio}`);
-      }
-    });
-    forcePixelRatioToggle.checked = false;
+    // Qualità / Debug controls
+    aaToggle.checked = true;
+    pixelRatioSelect.value = "0"; // auto
+    toneMappingSelect.value = "2"; // ACES
+    outputEncodingToggle.checked = true; // sRGB
+    debugOverlayToggle.checked = false;
     
-    // Debug toggle
-    debugToggle.addEventListener('change', (e) => {
+    applySettingsBtn.addEventListener('click', () => {
+      rebuildRenderer();
+      // Riapplica offset e aggiorna viewport
+      applyOffset();
+      renderCamera.aspect = window.innerWidth / window.innerHeight;
+      renderCamera.updateProjectionMatrix();
+    });
+    
+    debugOverlayToggle.addEventListener('change', (e) => {
       debugVisible = e.target.checked;
       debugOverlay.classList.toggle('show', debugVisible);
-      if (debugVisible) {
-        setStatus('🐞 Debug attivo');
-      } else {
-        setStatus('🐞 Debug disattivato');
-      }
     });
-    debugToggle.checked = false;
     
     function collectAndCreateLightControls(root) {
       allLights = [];
@@ -1301,7 +1377,6 @@
     }
     const isMobile = detectMobile();
     
-    // OFFSET: attivo su smartphone con 5 cm (0.05)
     if (isMobile) {
       offsetEnabled = true;
       offsetCheckbox.checked = true;
@@ -1614,18 +1689,22 @@
       lastFrameTime = now;
       
       // Aggiorna FPS
-      frameCount++;
-      fpsTime += delta;
-      if (fpsTime >= 0.5) {
-        currentFPS = Math.round(frameCount / fpsTime);
-        frameCount = 0;
-        fpsTime = 0;
-        if (debugVisible) {
-          const pr = forcePixelRatioToggle.checked ? 1 : devicePixelRatio;
+      if (debugVisible) {
+        frameCount++;
+        fpsTime += delta;
+        if (fpsTime >= 0.5) {
+          currentFPS = Math.round(frameCount / fpsTime);
+          frameCount = 0;
+          fpsTime = 0;
+          const pr = renderer.getPixelRatio();
+          const tm = renderer.toneMapping;
+          const tmNames = ['None', 'Linear', 'ACES'];
           debugOverlay.innerHTML = `
             FPS: ${currentFPS}<br>
             Pixel ratio: ${pr}<br>
             Canvas: ${renderer.domElement.width}×${renderer.domElement.height}<br>
+            ToneMap: ${tmNames[tm] || tm}<br>
+            AA: ${renderer.domElement.getContext('webgl2') ? 'On' : 'Off'}<br>
             Frame: ${currentFrameIndex+1}/${frameTimes.length}
           `;
         }
@@ -1656,7 +1735,6 @@
 
 <div id="mobileMenuBtn">☰</div>
 
-<!-- Debug overlay -->
 <div id="debugOverlay">FPS: --<br>Pixel ratio: --<br>Canvas: --x--</div>
 
 <div class="ui-elements">
@@ -1670,6 +1748,34 @@
       <label><input type="checkbox" id="envToggle" checked> 🌍 Ambiente HDR</label>
       <label><input type="checkbox" id="bloomToggle"> Bloom</label>
       <label><input type="checkbox" id="lightsGlobalToggle" checked> 💡 Luci GLB</label>
+    </div>
+    
+    <hr>
+    
+    <!-- SEZIONE QUALITÀ / DEBUG -->
+    <div style="background: rgba(0,100,200,0.15); border-radius: 12px; padding: 10px; margin-bottom: 8px; border: 1px solid rgba(100,200,255,0.3);">
+      <div style="font-weight: bold; color: #88ddff; margin-bottom: 6px; font-size: 12px;">🎯 QUALITÀ / DEBUG</div>
+      <label><input type="checkbox" id="aaToggle" checked> Antialiasing</label>
+      <label>Pixel ratio 
+        <select id="pixelRatioSelect">
+          <option value="0">Automatico</option>
+          <option value="1">1</option>
+          <option value="1.5">1.5</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+      </label>
+      <label>Tone Mapping 
+        <select id="toneMappingSelect">
+          <option value="0">None</option>
+          <option value="1">Linear</option>
+          <option value="2" selected>ACES Filmic</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="outputEncodingToggle" checked> sRGB Encoding</label>
+      <label><input type="checkbox" id="debugOverlayToggle"> Mostra FPS / info</label>
+      <button id="applySettingsBtn" style="background: #2a6f5c; margin-top: 8px;">🔄 Applica impostazioni</button>
+      <div style="font-size: 10px; margin-top: 4px; color:#aaa;">Ricrea il renderer con le impostazioni selezionate</div>
     </div>
     
     <hr>
@@ -1732,11 +1838,6 @@
     <label><input type="checkbox" id="offsetCheckbox"> Sposta a destra</label>
     <button id="testOffsetBtn" style="background:#4a6a5c;">🔁 Test (2 sec)</button>
     <div style="font-size: 11px; margin-top: 4px; color:#aaa;">Su smartphone attivo automaticamente.</div>
-    <hr>
-    <div style="font-weight: bold; margin: 8px 0 4px 0;">🐞 DEBUG</div>
-    <label><input type="checkbox" id="debugToggle"> Mostra FPS / informazioni</label>
-    <label><input type="checkbox" id="forcePixelRatioToggle"> Forza pixel ratio = 1</label>
-    <div style="font-size: 11px; margin-top: 4px; color:#aaa;">Se la qualità è bassa, prova a forzare pixel ratio = 1</div>
     <hr>
     <div style="font-weight: bold; margin: 8px 0 4px 0;">🖼️ SFONDO</div>
     <div class="file-input-label" id="loadBackgroundBtn">📁 Carica immagine sfondo</div>
