@@ -325,6 +325,12 @@
     const debugOverlay = document.getElementById('debugOverlay');
     const applySettingsBtn = document.getElementById('applySettingsBtn');
 
+    // NUOVI CONTROLLI PER QUALITÀ OMBRE
+    const shadowMapSizeSelect = document.getElementById('shadowMapSize');
+    const shadowMapTypeSelect = document.getElementById('shadowMapType');
+    const shadowBiasSlider = document.getElementById('shadowBias');
+    const shadowBiasVal = document.getElementById('shadowBiasVal');
+
     const particleCountSlider = document.getElementById('particleCount');
     const particleCountVal = document.getElementById('particleCountVal');
     const particleSizeSlider = document.getElementById('particleSize');
@@ -424,13 +430,45 @@
     const CAMERA_OFFSET_TARGET = -0.01;
     const MAX_FRAME = 340;
     
-    // Riferimenti a renderer e scene per le modifiche
     let scene, renderer, renderCamera;
     let frameCount = 0;
     let fpsTime = 0;
     let currentFPS = 0;
     let debugVisible = false;
     
+    // Funzione per applicare le impostazioni di qualità ombre a TUTTE le luci
+    function applyShadowQuality() {
+      const size = parseInt(shadowMapSizeSelect.value);
+      const typeMap = {
+        '0': THREE.PCFShadowMap,
+        '1': THREE.PCFSoftShadowMap,
+        '2': THREE.VSMShadowMap
+      };
+      const type = typeMap[shadowMapTypeSelect.value] || THREE.PCFShadowMap;
+      const bias = parseFloat(shadowBiasSlider.value);
+
+      // Imposta tipo sul renderer
+      renderer.shadowMap.type = type;
+
+      // Itera su tutte le luci e imposta la qualità
+      allLights.forEach(light => {
+        if (light.shadow) {
+          light.shadow.mapSize.width = size;
+          light.shadow.mapSize.height = size;
+          light.shadow.bias = bias;
+          // Per luci spot/directional si può anche impostare il radius per il blur
+          if (light.shadow.radius !== undefined) {
+            light.shadow.radius = (type === THREE.VSMShadowMap) ? 4 : 1;
+          }
+          light.shadow.needsUpdate = true;
+        }
+      });
+
+      // Aggiorna lo status
+      const typeNames = ['PCF', 'PCFSoft', 'VSM'];
+      setStatus(`Ombre: risoluzione ${size}, tipo ${typeNames[shadowMapTypeSelect.value] || 'PCF'}, bias ${bias.toFixed(4)}`);
+    }
+
     // Funzione per ricreare il renderer con le impostazioni correnti
     function rebuildRenderer() {
       const aa = aaToggle.checked;
@@ -470,7 +508,10 @@
       }
       
       renderer.shadowMap.enabled = shadowsToggle.checked;
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.shadowMap.type = (() => {
+        const types = [THREE.PCFShadowMap, THREE.PCFSoftShadowMap, THREE.VSMShadowMap];
+        return types[parseInt(shadowMapTypeSelect.value)] || THREE.PCFShadowMap;
+      })();
       
       // Inserisci nel DOM
       document.body.appendChild(renderer.domElement);
@@ -496,6 +537,9 @@
           }
         }
       }
+      
+      // Riapplica qualità ombre alle luci
+      applyShadowQuality();
       
       setStatus(`✅ Renderer ricreato: AA=${aa}, PR=${pixelRatio===0?'auto':pixelRatio}, TM=${toneMapping}, sRGB=${sRGB}`);
     }
@@ -764,10 +808,23 @@
     });
     bloomIntensity.disabled = true;
     
-    // Toggle ombre
+    // Toggle ombre migliorato: abilita/disabilita castShadow sulle luci e applica qualità
     shadowsToggle.addEventListener('change', (e) => {
-      renderer.shadowMap.enabled = e.target.checked;
-      setStatus(renderer.shadowMap.enabled ? '🌓 Ombre attivate' : '🌓 Ombre disattivate');
+      const enabled = e.target.checked;
+      renderer.shadowMap.enabled = enabled;
+      allLights.forEach(light => {
+        light.castShadow = enabled;
+        if (enabled) {
+          // Applica le impostazioni di qualità appena abilitate
+          applyShadowQuality();
+        } else {
+          if (light.shadow) {
+            light.shadow.mapSize.width = 1;
+            light.shadow.mapSize.height = 1;
+          }
+        }
+      });
+      setStatus(enabled ? '🌓 Ombre attivate' : '🌓 Ombre disattivate');
     });
     shadowsToggle.checked = false;
     
@@ -808,6 +865,20 @@
     outputEncodingToggle.checked = true; // sRGB
     debugOverlayToggle.checked = false;
     
+    // Eventi per i nuovi controlli qualità ombre
+    shadowMapSizeSelect.addEventListener('change', () => {
+      applyShadowQuality();
+    });
+    shadowMapTypeSelect.addEventListener('change', () => {
+      applyShadowQuality();
+    });
+    shadowBiasSlider.addEventListener('input', () => {
+      shadowBiasVal.textContent = parseFloat(shadowBiasSlider.value).toFixed(4);
+      applyShadowQuality();
+    });
+    // Imposta valore iniziale del bias
+    shadowBiasVal.textContent = shadowBiasSlider.value;
+
     applySettingsBtn.addEventListener('click', () => {
       rebuildRenderer();
       // Riapplica offset e aggiorna viewport
@@ -834,7 +905,8 @@
       root.traverse(obj => {
         if (obj.isLight) {
           allLights.push(obj);
-          obj.castShadow = false;
+          // Se le ombre sono attive, abilita castShadow, altrimenti no
+          obj.castShadow = shadowsToggle.checked;
           
           const lightDiv = document.createElement('div');
           lightDiv.className = 'light-control';
@@ -956,6 +1028,11 @@
           lightControls.set(obj, { toggleCheck, intensitySlider, origIntensity });
         }
       });
+      
+      // Dopo aver raccolto le luci, applica le impostazioni di qualità (se le ombre sono attive)
+      if (shadowsToggle.checked) {
+        applyShadowQuality();
+      }
       
       lightsGlobalIntensity.addEventListener('input', () => {
         const mult = parseFloat(lightsGlobalIntensity.value);
@@ -1752,7 +1829,7 @@
     
     <hr>
     
-    <!-- SEZIONE QUALITÀ / DEBUG -->
+    <!-- SEZIONE QUALITÀ / DEBUG (modificata) -->
     <div style="background: rgba(0,100,200,0.15); border-radius: 12px; padding: 10px; margin-bottom: 8px; border: 1px solid rgba(100,200,255,0.3);">
       <div style="font-weight: bold; color: #88ddff; margin-bottom: 6px; font-size: 12px;">🎯 QUALITÀ / DEBUG</div>
       <label><input type="checkbox" id="aaToggle" checked> Antialiasing</label>
@@ -1774,6 +1851,26 @@
       </label>
       <label><input type="checkbox" id="outputEncodingToggle" checked> sRGB Encoding</label>
       <label><input type="checkbox" id="debugOverlayToggle"> Mostra FPS / info</label>
+      <!-- NUOVI CONTROLLI PER QUALITÀ OMBRE -->
+      <label>Risoluzione shadow map
+        <select id="shadowMapSize">
+          <option value="256">256</option>
+          <option value="512">512</option>
+          <option value="1024">1024</option>
+          <option value="2048" selected>2048</option>
+          <option value="4096">4096</option>
+        </select>
+      </label>
+      <label>Tipo shadow map
+        <select id="shadowMapType">
+          <option value="0">PCF</option>
+          <option value="1" selected>PCFSoft</option>
+          <option value="2">VSM</option>
+        </select>
+      </label>
+      <label>Bias ombre <span id="shadowBiasVal" class="value-display">0.0010</span></label>
+      <input type="range" id="shadowBias" min="0" max="0.02" step="0.0001" value="0.001">
+      <!-- Fine nuovi controlli -->
       <button id="applySettingsBtn" style="background: #2a6f5c; margin-top: 8px;">🔄 Applica impostazioni</button>
       <div style="font-size: 10px; margin-top: 4px; color:#aaa;">Ricrea il renderer con le impostazioni selezionate</div>
     </div>
