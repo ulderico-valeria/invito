@@ -33,7 +33,6 @@
     object-position: center;
   }
   
-  /* Canvas container per zoom */
   #canvas-container {
     position: fixed;
     top: 0;
@@ -89,7 +88,6 @@
     50% { transform: translateY(8px); }
   }
 
-  /* Pulsante menu mobile (solo smartphone) */
   #mobileMenuBtn {
     position: fixed;
     top: 20px;
@@ -298,7 +296,6 @@
     const loadBubbleTextureBtn = document.getElementById('loadBubbleTextureBtn');
     const resetBubbleTextureBtn = document.getElementById('resetBubbleTextureBtn');
 
-    // Toggle effetti
     const shadowsToggle = document.getElementById('shadowsToggle');
     const envToggle = document.getElementById('envToggle');
     const lightsGlobalToggle = document.getElementById('lightsGlobalToggle');
@@ -354,9 +351,6 @@
     let zoomScale = 1;
     let zoomTranslateX = 0;
     let zoomTranslateY = 0;
-    let lastTouchDist = 0;
-    let lastTouchX = 0;
-    let lastTouchY = 0;
     let isPinching = false;
     
     let particleSprites = [];
@@ -395,7 +389,6 @@
     let hasScrolled = false;
     let idleAfterFirstScroll = false;
     
-    // Variabili per GLB
     let gltfRoot = null;
     let mixer = null;
     let clipDuration = 0;
@@ -408,17 +401,13 @@
     let baseCameraNear = 0.01;
     let baseCameraFar = 10000;
     
-    // Variabili per movimento camera smooth (frame 45-65) -1cm = -0.01
     let cameraSmoothOffset = 0;
-    const CAMERA_OFFSET_TARGET = -0.01; // -1cm
-    
+    const CAMERA_OFFSET_TARGET = -0.01;
     const MAX_FRAME = 340;
     
-    // Riferimento al container del canvas per lo zoom
     const canvasContainer = document.getElementById('canvas-container');
     const canvasElement = canvasContainer ? canvasContainer.querySelector('canvas') : null;
     
-    // Carica texture bollicine default da asset/bubble_b.webp
     function loadDefaultBubbleTexture() {
       const imgLoader = new THREE.TextureLoader();
       imgLoader.load('./asset/bubble_b.webp', 
@@ -457,7 +446,6 @@
       );
     }
     
-    // Texture bollicina procedurale (fallback)
     function createGradientCircleTexture() {
       const canvas = document.createElement('canvas');
       canvas.width = 64;
@@ -518,7 +506,6 @@
       }
     });
     
-    // Sfondo immagine
     const bgImage = document.getElementById('background-image');
     function setBackgroundImage(url) {
       bgImage.src = url;
@@ -556,7 +543,6 @@
       resetBackgroundToDefault();
     });
     
-    // Setup Three.js
     const scene = new THREE.Scene();
     scene.background = null;
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -567,7 +553,6 @@
     renderer.toneMappingExposure = 1.0;
     renderer.shadowMap.enabled = false;
     
-    // Aggiungi canvas al container
     if (canvasContainer) {
       canvasContainer.appendChild(renderer.domElement);
     } else {
@@ -590,18 +575,13 @@
     const pmremGen = new THREE.PMREMGenerator(renderer);
     pmremGen.compileEquirectangularShader();
     
-    // ---------- GESTIONE ZOOM CON PINCH ----------
     function applyZoom() {
       if (!canvasElement) return;
       if (zoomEnabled) {
-        // Applica trasformazione al canvas per lo zoom
         const scale = Math.max(0.5, Math.min(3, zoomScale));
-        const tx = zoomTranslateX;
-        const ty = zoomTranslateY;
-        canvasElement.style.transform = `scale(${scale}) translate(${tx}px, ${ty}px)`;
+        canvasElement.style.transform = `scale(${scale}) translate(${zoomTranslateX}px, ${zoomTranslateY}px)`;
         canvasElement.style.transformOrigin = 'center center';
       } else {
-        // Reset zoom
         canvasElement.style.transform = 'scale(1) translate(0px, 0px)';
         zoomScale = 1;
         zoomTranslateX = 0;
@@ -609,7 +589,6 @@
       }
     }
     
-    // Gestione touch per pinch to zoom
     function setupPinchZoom() {
       if (!canvasElement) return;
       
@@ -623,7 +602,6 @@
       canvasElement.addEventListener('touchstart', (e) => {
         if (!zoomEnabled) return;
         if (e.touches.length === 2) {
-          // Inizio pinch
           isPinching = true;
           const touch1 = e.touches[0];
           const touch2 = e.touches[1];
@@ -635,9 +613,6 @@
           pinchCenterY = (touch1.clientY + touch2.clientY) / 2 - window.innerHeight / 2;
           e.preventDefault();
         } else if (e.touches.length === 1) {
-          // Inizio pan
-          lastTouchX = e.touches[0].clientX;
-          lastTouchY = e.touches[0].clientY;
           initialTx = zoomTranslateX;
           initialTy = zoomTranslateY;
         }
@@ -646,18 +621,14 @@
       canvasElement.addEventListener('touchmove', (e) => {
         if (!zoomEnabled) return;
         if (e.touches.length === 2 && isPinching) {
-          // Pinch
           const touch1 = e.touches[0];
           const touch2 = e.touches[1];
           const dist = Math.hypot(touch1.clientX - touch2.clientX, touch1.clientY - touch2.clientY);
           const scaleFactor = dist / initialPinchDist;
           zoomScale = Math.max(0.5, Math.min(3, initialScale * scaleFactor));
           
-          // Centro del pinch
           const centerX = (touch1.clientX + touch2.clientX) / 2 - window.innerWidth / 2;
           const centerY = (touch1.clientY + touch2.clientY) / 2 - window.innerHeight / 2;
-          
-          // Aggiorna traslazione per mantenere il centro
           const deltaX = centerX - pinchCenterX;
           const deltaY = centerY - pinchCenterY;
           zoomTranslateX = initialTx + deltaX * (zoomScale / initialScale) - deltaX;
@@ -666,11 +637,10 @@
           applyZoom();
           e.preventDefault();
         } else if (e.touches.length === 1) {
-          // Pan con un dito
-          const dx = e.touches[0].clientX - lastTouchX;
-          const dy = e.touches[0].clientY - lastTouchY;
-          zoomTranslateX = initialTx + dx;
-          zoomTranslateY = initialTy + dy;
+          const dx = e.touches[0].clientX - initialTx / zoomScale;
+          const dy = e.touches[0].clientY - initialTy / zoomScale;
+          zoomTranslateX = initialTx + dx * zoomScale;
+          zoomTranslateY = initialTy + dy * zoomScale;
           applyZoom();
           e.preventDefault();
         }
@@ -679,7 +649,6 @@
       canvasElement.addEventListener('touchend', (e) => {
         if (!zoomEnabled) return;
         isPinching = false;
-        // Limita la traslazione per non perdere il canvas
         const maxTx = window.innerWidth * (zoomScale - 1) / 2;
         const maxTy = window.innerHeight * (zoomScale - 1) / 2;
         zoomTranslateX = Math.max(-maxTx, Math.min(maxTx, zoomTranslateX));
@@ -688,7 +657,6 @@
       }, { passive: false });
     }
     
-    // Funzioni ambiente
     function applyEnvironmentTexture(texture, isHdr = false) {
       if (!texture) return;
       texture.mapping = THREE.EquirectangularReflectionMapping;
@@ -787,28 +755,24 @@
     });
     bloomIntensity.disabled = true;
     
-    // Toggle ombre
     shadowsToggle.addEventListener('change', (e) => {
       renderer.shadowMap.enabled = e.target.checked;
       setStatus(renderer.shadowMap.enabled ? '🌓 Ombre attivate' : '🌓 Ombre disattivate');
     });
     shadowsToggle.checked = false;
     
-    // Toggle ambiente HDR
     envToggle.addEventListener('change', (e) => {
       envActive = e.target.checked;
       updateEnvironmentVisibility();
     });
     envToggle.checked = true;
     
-    // Toggle zoom
     zoomToggle.addEventListener('change', (e) => {
       zoomEnabled = e.target.checked;
       if (canvasContainer) {
         canvasContainer.classList.toggle('zoom-enabled', zoomEnabled);
       }
       if (!zoomEnabled) {
-        // Reset zoom
         zoomScale = 1;
         zoomTranslateX = 0;
         zoomTranslateY = 0;
@@ -820,7 +784,6 @@
     });
     zoomToggle.checked = false;
     
-    // Toggle luci globali
     lightsGlobalToggle.addEventListener('change', (e) => {
       lightsGlobalActive = e.target.checked;
       allLights.forEach(light => {
@@ -845,7 +808,6 @@
     envIntensitySlider.value = "1.0";
     envIntensityVal.textContent = "1.00";
     
-    // Luci GLB
     function collectAndCreateLightControls(root) {
       allLights = [];
       lightControls.clear();
@@ -995,7 +957,6 @@
       });
     }
     
-    // ---------- SISTEMA A SPRITE PER BOLLICINE ----------
     function createParticles() {
       for (let sprite of particleSprites) {
         scene.remove(sprite);
@@ -1119,7 +1080,6 @@
     
     function rebuildParticles() { createParticles(); }
     
-    // ---------- FUNZIONI PER GESTIRE ANIMAZIONI ----------
     function findCamera(root) {
       let found = null;
       root.traverse((obj) => {
@@ -1137,13 +1097,10 @@
       animatedCamera.getWorldPosition(pos);
       animatedCamera.getWorldQuaternion(quat);
       
-      // Calcola offset camera per frame 45-65 (-1cm = -0.01)
       const frame = currentFrameIndex;
       let targetOffset = 0;
-      // Da frame 45 a 65: transizione graduale a -0.01
       if (frame >= 45 && frame <= 65) {
-        const t = (frame - 45) / 20; // 0 a 1
-        // Smoothstep per transizione più morbida
+        const t = (frame - 45) / 20;
         const smooth = t * t * (3 - 2 * t);
         targetOffset = CAMERA_OFFSET_TARGET * smooth;
       } else if (frame > 65) {
@@ -1152,14 +1109,11 @@
         targetOffset = 0;
       }
       
-      // Smooth interpolation
       cameraSmoothOffset += (targetOffset - cameraSmoothOffset) * 0.08;
       
-      // Applica offset alla posizione della camera
       const finalPos = pos.clone();
       finalPos.x += cameraSmoothOffset;
       
-      // Aggiorna camera di rendering
       renderCamera.position.copy(finalPos);
       renderCamera.quaternion.copy(quat);
       renderCamera.fov = animatedCamera.fov || baseCameraFov;
@@ -1169,7 +1123,6 @@
       renderCamera.aspect = window.innerWidth / window.innerHeight;
       renderCamera.updateProjectionMatrix();
       
-      // Salva posizione originale per offset checkbox
       originalCameraPos.copy(finalPos);
     }
     
@@ -1253,7 +1206,6 @@
       return uniqueSorted(generated);
     }
     
-    // Rotazione armatura
     function updateArmatureRotation(deltaTime) {
       if (!armatureObj) return;
       
@@ -1312,7 +1264,6 @@
       armatureObj.rotation.z = Math.sin(rotClock * speedZ) * amplZ;
     }
     
-    // Eventi UI
     rotXSpeed.addEventListener('input', () => { rotXSpeedVal.textContent = parseFloat(rotXSpeed.value).toFixed(2); });
     rotXAmpl.addEventListener('input', () => { rotXAmplVal.textContent = parseFloat(rotXAmpl.value).toFixed(3); });
     rotYSpeed.addEventListener('input', () => { rotYSpeedVal.textContent = parseFloat(rotYSpeed.value).toFixed(2); });
@@ -1328,7 +1279,6 @@
     rotZAmpl.value = "0.121"; rotZAmplVal.textContent = "0.121";
     rotMasterToggle.checked = true;
     
-    // Valori predefiniti bollicine
     particleCountSlider.value = "1200";
     particleSizeSlider.value = "0.05";
     particleSpeedSlider.value = "0.14";
@@ -1347,7 +1297,6 @@
     lightsGlobalIntensityVal.textContent = "0.80";
     lightsGlobalToggle.checked = true;
     
-    // Offset checkbox disattivato di default
     offsetCheckbox.checked = false;
     offsetEnabled = false;
     
@@ -1413,7 +1362,6 @@
       }
     });
     
-    // Offset X (disattivato di default)
     function detectMobile() {
       return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
     }
@@ -1450,7 +1398,6 @@
       }, 2000);
     });
     
-    // Scroll hint
     scrollHint = document.createElement('div');
     scrollHint.id = 'scrollHint';
     scrollHint.innerHTML = '<span class="material-icons">keyboard_arrow_down</span>';
@@ -1498,7 +1445,6 @@
     }, 5000);
     resetInactivityTimer();
     
-    // Pulsante menu mobile
     if (isMobile) {
       mobileMenuBtn.style.display = 'flex';
       mobileMenuBtn.addEventListener('click', (e) => {
@@ -1514,7 +1460,6 @@
       });
     }
     
-    // UI toggle con tasto U (desktop)
     let uiVisible = false;
     function toggleUI() {
       uiVisible = !uiVisible;
@@ -1534,79 +1479,75 @@
       }
     });
     
-    // Gestione touch per frame scrubbing (con compatibilità zoom)
+    // Variabili per touch frame scrubbing (senza conflitti)
+    let touchScrubY = 0;
+    let touchAccumScrub = 0;
     let isTouchOnPanel = false;
-    let lastTouchY = 0;
-    let touchAccum = 0;
-    let isTouching = false;
     
-    window.addEventListener('touchstart', (e) => {
-      if(!e.touches.length) return;
-      
-      // Se zoom attivo e ci sono 2 dita, non interferire
-      if (zoomEnabled && e.touches.length >= 2) {
-        return;
-      }
-      
-      if (uiElements.style.display === 'block') {
-        const panel = document.querySelector('.ui-panel');
-        const rect = panel.getBoundingClientRect();
-        const touch = e.touches[0];
-        if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
-            touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
-          isTouchOnPanel = true;
+    if (canvasElement) {
+      canvasElement.addEventListener('touchstart', (e) => {
+        if(!e.touches.length) return;
+        
+        if (zoomEnabled && e.touches.length >= 2) {
           return;
         }
-      }
+        
+        if (uiElements.style.display === 'block') {
+          const panel = document.querySelector('.ui-panel');
+          const rect = panel.getBoundingClientRect();
+          const touch = e.touches[0];
+          if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
+              touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+            isTouchOnPanel = true;
+            return;
+          }
+        }
+        
+        isTouchOnPanel = false;
+        touchScrubY = e.touches[0].clientY;
+        touchAccumScrub = 0;
+        onUserInteraction();
+      }, { passive: true });
       
-      isTouchOnPanel = false;
-      isTouching = true;
-      lastTouchY = e.touches[0].clientY;
-      touchAccum = 0;
-      onUserInteraction();
-    }, { passive: true });
-    
-    window.addEventListener('touchmove', (e) => {
-      if(!e.touches.length) return;
-      
-      // Se zoom attivo e ci sono 2 dita, non interferire (gestito da pinch zoom)
-      if (zoomEnabled && e.touches.length >= 2) {
-        return;
-      }
-      
-      if (isTouchOnPanel) {
-        return;
-      }
-      
-      if (uiElements.style.display === 'block') {
-        const panel = document.querySelector('.ui-panel');
-        const rect = panel.getBoundingClientRect();
-        const touch = e.touches[0];
-        if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
-            touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+      canvasElement.addEventListener('touchmove', (e) => {
+        if(!e.touches.length) return;
+        
+        if (zoomEnabled && e.touches.length >= 2) {
           return;
         }
-      }
+        
+        if (isTouchOnPanel) {
+          return;
+        }
+        
+        if (uiElements.style.display === 'block') {
+          const panel = document.querySelector('.ui-panel');
+          const rect = panel.getBoundingClientRect();
+          const touch = e.touches[0];
+          if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
+              touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+            return;
+          }
+        }
+        
+        e.preventDefault();
+        const delta = touchScrubY - e.touches[0].clientY;
+        touchScrubY = e.touches[0].clientY;
+        touchAccumScrub += delta;
+        const thr = 14;
+        if(Math.abs(touchAccumScrub) >= thr) {
+          const steps = Math.trunc(touchAccumScrub / thr);
+          touchAccumScrub -= steps * thr;
+          for(let i=0; i<Math.abs(steps); i++) stepFrame(steps > 0 ? 1 : -1);
+        }
+        onUserInteraction();
+      }, { passive: false });
       
-      e.preventDefault();
-      const delta = lastTouchY - e.touches[0].clientY;
-      lastTouchY = e.touches[0].clientY;
-      touchAccum += delta;
-      const thr = 14;
-      if(Math.abs(touchAccum) >= thr) {
-        const steps = Math.trunc(touchAccum / thr);
-        touchAccum -= steps * thr;
-        for(let i=0; i<Math.abs(steps); i++) stepFrame(steps > 0 ? 1 : -1);
-      }
-      onUserInteraction();
-    }, { passive: false });
+      canvasElement.addEventListener('touchend', () => {
+        isTouchOnPanel = false;
+      });
+    }
     
-    window.addEventListener('touchend', () => {
-      isTouchOnPanel = false;
-      isTouching = false;
-    });
-    
-    // Wheel event per frame scrubbing
     window.addEventListener('wheel', (e) => {
       if (uiElements.style.display === 'block') {
         const panel = document.querySelector('.ui-panel');
@@ -1631,12 +1572,114 @@
       renderCamera.updateProjectionMatrix();
     });
     
-    // Carica texture default e ambiente
+    const loader = new GLTFLoader();
+    
+    loader.load('./invito.glb', (gltf) => {
+      if(gltfRoot) scene.remove(gltfRoot);
+      gltfRoot = gltf.scene;
+      scene.add(gltfRoot);
+      
+      collectAndCreateLightControls(gltfRoot);
+      
+      armatureObj = null;
+      gltfRoot.traverse(obj => {
+        if (obj.name && obj.name.toLowerCase() === "armature.001") armatureObj = obj;
+      });
+      if (!armatureObj) {
+        gltfRoot.traverse(obj => {
+          if (!armatureObj && obj.name && obj.name.toLowerCase().includes('armature')) armatureObj = obj;
+        });
+        if (armatureObj) console.log("✅ Trovata armatura alternativa:", armatureObj.name);
+      }
+      
+      gltfRoot.traverse(obj => {
+        if(obj.isMesh) {
+          obj.frustumCulled = false;
+          obj.castShadow = false;
+          obj.receiveShadow = false;
+          if(obj.material) obj.material.needsUpdate = true;
+        }
+      });
+      
+      animatedCamera = findCamera(gltfRoot);
+      if(animatedCamera) updateRenderCameraFromGLB();
+      originalCameraPos.copy(renderCamera.position);
+      
+      if(gltf.animations && gltf.animations.length) {
+        console.log(`✅ Trovate ${gltf.animations.length} animazioni`);
+        gltf.animations.forEach((clip, idx) => {
+          console.log(`  ${idx+1}. "${clip.name}" - durata: ${clip.duration}s, tracce: ${clip.tracks.length}`);
+        });
+        
+        const trackNameMap = {
+          'Plane.004': 'Plane013',
+          'Plane.008': 'Plane015'
+        };
+        
+        gltf.animations.forEach(clip => {
+          clip.tracks.forEach(track => {
+            for (const [oldName, newName] of Object.entries(trackNameMap)) {
+              if (track.name.startsWith(oldName + '.')) {
+                const newTrackName = track.name.replace(oldName, newName);
+                console.log(`🔀 Rinomina traccia: "${track.name}" → "${newTrackName}"`);
+                track.name = newTrackName;
+              }
+            }
+          });
+        });
+        
+        mixer = new THREE.AnimationMixer(gltfRoot);
+        
+        let maxDuration = 0;
+        gltf.animations.forEach(clip => {
+          if (clip.duration > maxDuration) maxDuration = clip.duration;
+        });
+        clipDuration = maxDuration;
+        
+        gltf.animations.forEach(clip => {
+          const action = mixer.clipAction(clip);
+          action.enabled = true;
+          action.paused = false;
+          action.clampWhenFinished = true;
+          action.loop = THREE.LoopOnce;
+          action.play();
+        });
+        
+        mixer.update(0);
+        
+        const refClip = gltf.animations.reduce((a,b) => (b.duration > a.duration ? b : a), gltf.animations[0]);
+        frameTimes = collectFrameTimesFromClip(refClip);
+        
+        if (frameTimes.length > MAX_FRAME) {
+          frameTimes = frameTimes.slice(0, MAX_FRAME);
+        }
+        
+        currentFrameIndex = 0;
+        currentTime = frameTimes[0] || 0;
+        targetTime = currentTime;
+        applyTime(currentTime);
+        
+        setStatus(`${animatedCamera ? 'Camera GLB' : 'Camera fissa'}\nClip: ${gltf.animations.length}\nFrame: ${frameTimes.length}/${MAX_FRAME}\nTime: ${currentTime.toFixed(4)}s`);
+      } else {
+        mixer = null;
+        setStatus(`${animatedCamera ? 'Camera trovata' : 'Nessuna camera'}\nNessuna animazione nel GLB`);
+      }
+      
+      createParticles();
+    }, (xhr) => {
+      if(xhr.total) setStatus(`Caricamento GLB: ${Math.round(xhr.loaded/xhr.total*100)}%`);
+    }, (err) => {
+      console.error('Errore caricamento GLB:', err);
+      setStatus('Errore caricamento GLB - avvio con sole bollicine');
+      if (!sharedTexture) {
+        sharedTexture = defaultBubbleTexture || createGradientCircleTexture();
+      }
+      createParticles();
+    });
+    
     loadDefaultBubbleTexture();
     loadInitialEnvironment();
     loadDefaultBackground();
-    
-    // Setup pinch zoom
     setupPinchZoom();
     
     let lastFrameTime = performance.now();
@@ -1669,10 +1712,8 @@
   <img id="background-image" alt="background" style="display:block">
 </div>
 
-<!-- Container canvas per zoom -->
 <div id="canvas-container"></div>
 
-<!-- Pulsante menu mobile (solo smartphone) -->
 <div id="mobileMenuBtn">☰</div>
 
 <div class="ui-elements">
@@ -1680,7 +1721,6 @@
   <div id="uiPanel" class="ui-panel">
     <div style="font-weight: bold; margin-bottom: 6px;">🎨 CONTROLLI FX</div>
     
-    <!-- Sezione Toggle On/Off per artefatti visivi -->
     <div style="background: rgba(255,0,0,0.1); border-radius: 12px; padding: 10px; margin-bottom: 8px; border: 1px solid rgba(255,100,100,0.3);">
       <div style="font-weight: bold; color: #ff8888; margin-bottom: 6px; font-size: 12px;">⚠️ DISATTIVA SU SMARTPHONE</div>
       <label><input type="checkbox" id="shadowsToggle"> 🌓 Ombre</label>
