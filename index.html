@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>GLB Frame Scrubber - Zoom 2D / 3D</title>
+<title>GLB Frame Scrubber - Zoom 2D</title>
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
 <style>
@@ -425,8 +425,7 @@
     const envIntensitySlider = document.getElementById('envIntensity');
     const envIntensityVal = document.getElementById('envIntensityVal');
 
-    // NUOVI CONTROLLI
-    const zoomModeToggle = document.getElementById('zoomModeToggle');
+    // Controllo max zoom 2D
     const maxZoom2dSlider = document.getElementById('maxZoom2dSlider');
     const maxZoom2dVal = document.getElementById('maxZoom2dVal');
 
@@ -496,18 +495,11 @@
     let currentFPS = 0;
     let debugVisible = false;
 
-    // ZOOM 3D
-    let pinchZoomFactor = 1.0;
-    let prevPinchDist = 0;
-    let isTouchOnPanel = false;
-
     // ZOOM 2D
     let scale2d = 1.0;
     let panX2d = 0;
     let panY2d = 0;
-    let zoomMode = '3d';
     let maxZoom2d = 5.0;
-
     let isPanning = false;
     let isScrubbing = false;
     let panStartX = 0, panStartY = 0;
@@ -515,16 +507,13 @@
     let pinchStartScale = 1;
     let pinchStartPanX = 0, pinchStartPanY = 0;
     let pinchCenterX = 0, pinchCenterY = 0;
+    let isTouchOnPanel = false;
 
     let canvasEl = null;
 
     function updateCanvasTransform() {
       if (!canvasEl) return;
-      if (zoomMode === '2d') {
-        canvasEl.style.transform = `translate(${panX2d}px, ${panY2d}px) scale(${scale2d})`;
-      } else {
-        canvasEl.style.transform = 'none';
-      }
+      canvasEl.style.transform = `translate(${panX2d}px, ${panY2d}px) scale(${scale2d})`;
     }
 
     function resetZoom2D() {
@@ -534,30 +523,7 @@
       updateCanvasTransform();
     }
 
-    function resetZoom3D() {
-      pinchZoomFactor = 1.0;
-    }
-
-    function setZoomMode(mode) {
-      if (mode === zoomMode) return;
-      zoomMode = mode;
-      zoomModeToggle.checked = (mode === '2d');
-      if (mode === '2d') {
-        resetZoom3D();
-        resetZoom2D();
-        setStatus('🔍 Zoom 2D – una dita: pan (se zoom), due dita: zoom');
-      } else {
-        resetZoom2D();
-        resetZoom3D();
-        setStatus('🎥 Zoom 3D – una dita: scrub, due dita: zoom camera');
-      }
-      updateCanvasTransform();
-    }
-
-    zoomModeToggle.addEventListener('change', (e) => {
-      setZoomMode(e.target.checked ? '2d' : '3d');
-    });
-
+    // Imposta max zoom
     if (maxZoom2dSlider) {
       maxZoom2dSlider.addEventListener('input', () => {
         maxZoom2d = parseFloat(maxZoom2dSlider.value);
@@ -567,7 +533,7 @@
       if (maxZoom2dVal) maxZoom2dVal.textContent = "5.0";
     }
 
-    // Funzioni qualità
+    // Funzioni qualità...
     function applyShadowQuality() {
       const size = parseInt(shadowMapSizeSelect.value);
       const typeMap = { '0': THREE.PCFShadowMap, '1': THREE.PCFSoftShadowMap, '2': THREE.VSMShadowMap };
@@ -707,14 +673,14 @@
       setStatus(`Sfondo immagine: ${url.split('/').pop()}`);
     }
     function resetBackgroundToDefault() {
-      const defaultUrl = './asset/background.png';
+      const defaultUrl = './asset/background.webp';
       fetch(defaultUrl).then(resp => {
         if (resp.ok) setBackgroundImage(defaultUrl);
         else setBackgroundImage('');
       }).catch(() => setBackgroundImage(''));
     }
     function loadDefaultBackground() {
-      const defaultUrl = './asset/background.png';
+      const defaultUrl = './asset/background.webp';
       fetch(defaultUrl).then(resp => {
         if (resp.ok) setBackgroundImage(defaultUrl);
       }).catch(() => {});
@@ -1247,12 +1213,8 @@
       renderCamera.near = animatedCamera.near || baseCameraNear;
       renderCamera.far = animatedCamera.far || baseCameraFar;
       
-      if (zoomMode === '3d') {
-        const baseZoom = animatedCamera.zoom || 1;
-        renderCamera.zoom = baseZoom * pinchZoomFactor;
-      } else {
-        renderCamera.zoom = animatedCamera.zoom || 1;
-      }
+      // Mantieni zoom della camera a 1 (nessuna modifica 3D)
+      renderCamera.zoom = animatedCamera.zoom || 1;
       
       renderCamera.aspect = window.innerWidth / window.innerHeight;
       renderCamera.updateProjectionMatrix();
@@ -1565,7 +1527,7 @@
       }
     });
     
-    // GESTIONE TOUCH UNIFICATA
+    // GESTIONE TOUCH (solo 2D)
     let touchStartY = 0;
     let touchAccum = 0;
 
@@ -1582,98 +1544,39 @@
       }
       isTouchOnPanel = false;
 
-      if (zoomMode === '2d') {
-        if (e.touches.length === 1) {
-          if (scale2d === 1 && panX2d === 0 && panY2d === 0) {
-            isScrubbing = true;
-            isPanning = false;
-            touchStartY = e.touches[0].clientY;
-            touchAccum = 0;
-          } else {
-            isScrubbing = false;
-            isPanning = true;
-            panStartX = e.touches[0].clientX - panX2d;
-            panStartY = e.touches[0].clientY - panY2d;
-          }
-        } else if (e.touches.length === 2) {
-          e.preventDefault();
-          isScrubbing = false;
+      if (e.touches.length === 1) {
+        // Se siamo a zoom base e pan zero, facciamo scrub, altrimenti pan
+        if (scale2d === 1 && panX2d === 0 && panY2d === 0) {
+          isScrubbing = true;
           isPanning = false;
-          const dx = e.touches[0].clientX - e.touches[1].clientX;
-          const dy = e.touches[0].clientY - e.touches[1].clientY;
-          prevPinchDist2d = Math.hypot(dx, dy);
-          pinchStartScale = scale2d;
-          pinchStartPanX = panX2d;
-          pinchStartPanY = panY2d;
-          pinchCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-          pinchCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-        }
-      } else {
-        if (e.touches.length === 1) {
           touchStartY = e.touches[0].clientY;
           touchAccum = 0;
-        } else if (e.touches.length === 2) {
-          e.preventDefault();
-          const dx = e.touches[0].clientX - e.touches[1].clientX;
-          const dy = e.touches[0].clientY - e.touches[1].clientY;
-          prevPinchDist = Math.hypot(dx, dy);
-          touchAccum = 0;
+        } else {
+          isScrubbing = false;
+          isPanning = true;
+          panStartX = e.touches[0].clientX - panX2d;
+          panStartY = e.touches[0].clientY - panY2d;
         }
+      } else if (e.touches.length === 2) {
+        e.preventDefault();
+        isScrubbing = false;
+        isPanning = false;
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        prevPinchDist2d = Math.hypot(dx, dy);
+        pinchStartScale = scale2d;
+        pinchStartPanX = panX2d;
+        pinchStartPanY = panY2d;
+        pinchCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        pinchCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
       }
     }, { passive: false });
 
     window.addEventListener('touchmove', (e) => {
       if (isTouchOnPanel) return;
 
-      if (zoomMode === '2d') {
-        if (e.touches.length === 1) {
-          if (isScrubbing) {
-            const delta = touchStartY - e.touches[0].clientY;
-            touchStartY = e.touches[0].clientY;
-            touchAccum += delta;
-            const thr = 14;
-            if (Math.abs(touchAccum) >= thr) {
-              const steps = Math.trunc(touchAccum / thr);
-              touchAccum -= steps * thr;
-              for (let i = 0; i < Math.abs(steps); i++) {
-                stepFrame(steps > 0 ? 1 : -1);
-              }
-            }
-          } else if (isPanning) {
-            e.preventDefault();
-            panX2d = e.touches[0].clientX - panStartX;
-            panY2d = e.touches[0].clientY - panStartY;
-            updateCanvasTransform();
-          }
-        } else if (e.touches.length === 2) {
-          e.preventDefault();
-          const dx = e.touches[0].clientX - e.touches[1].clientX;
-          const dy = e.touches[0].clientY - e.touches[1].clientY;
-          const currentDist = Math.hypot(dx, dy);
-          const ratio = currentDist / prevPinchDist2d;
-
-          let newScale = pinchStartScale * ratio;
-          newScale = Math.max(1, Math.min(maxZoom2d, newScale));
-
-          // Calcola pan centrato
-          const cx = pinchCenterX;
-          const cy = pinchCenterY;
-          const oldScale = pinchStartScale;
-          let panX_new = cx - (cx - pinchStartPanX) * (newScale / oldScale);
-          let panY_new = cy - (cy - pinchStartPanY) * (newScale / oldScale);
-
-          if (newScale === 1) {
-            panX_new = 0;
-            panY_new = 0;
-          }
-
-          scale2d = newScale;
-          panX2d = panX_new;
-          panY2d = panY_new;
-          updateCanvasTransform();
-        }
-      } else {
-        if (e.touches.length === 1) {
+      if (e.touches.length === 1) {
+        if (isScrubbing) {
           const delta = touchStartY - e.touches[0].clientY;
           touchStartY = e.touches[0].clientY;
           touchAccum += delta;
@@ -1685,15 +1588,38 @@
               stepFrame(steps > 0 ? 1 : -1);
             }
           }
-        } else if (e.touches.length === 2) {
+        } else if (isPanning) {
           e.preventDefault();
-          const dx = e.touches[0].clientX - e.touches[1].clientX;
-          const dy = e.touches[0].clientY - e.touches[1].clientY;
-          const currentDist = Math.hypot(dx, dy);
-          const ratio = currentDist / prevPinchDist;
-          pinchZoomFactor = Math.max(1.0, Math.min(3.0, pinchZoomFactor * ratio));
-          prevPinchDist = currentDist;
+          panX2d = e.touches[0].clientX - panStartX;
+          panY2d = e.touches[0].clientY - panStartY;
+          updateCanvasTransform();
         }
+      } else if (e.touches.length === 2) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const currentDist = Math.hypot(dx, dy);
+        const ratio = currentDist / prevPinchDist2d;
+
+        let newScale = pinchStartScale * ratio;
+        newScale = Math.max(1, Math.min(maxZoom2d, newScale));
+
+        // Calcola pan centrato
+        const cx = pinchCenterX;
+        const cy = pinchCenterY;
+        const oldScale = pinchStartScale;
+        let panX_new = cx - (cx - pinchStartPanX) * (newScale / oldScale);
+        let panY_new = cy - (cy - pinchStartPanY) * (newScale / oldScale);
+
+        if (newScale === 1) {
+          panX_new = 0;
+          panY_new = 0;
+        }
+
+        scale2d = newScale;
+        panX2d = panX_new;
+        panY2d = panY_new;
+        updateCanvasTransform();
       }
     }, { passive: false });
 
@@ -1705,6 +1631,7 @@
       }
     });
 
+    // Wheel per frame stepping (rimane attivo)
     window.addEventListener('wheel', (e) => {
       if (uiElements.style.display === 'block') {
         const panel = document.querySelector('.ui-panel');
@@ -1860,7 +1787,8 @@
     loadInitialEnvironment();
     loadDefaultBackground();
     
-    setZoomMode('3d');
+    // Imposta zoom 2D di default e aggiorna trasformazione
+    resetZoom2D();
     
     let lastFrameTime = performance.now();
     function animate() {
@@ -1979,16 +1907,9 @@
       <label>Bias ombre <span id="shadowBiasVal" class="value-display">0.0010</span></label>
       <input type="range" id="shadowBias" min="0" max="0.02" step="0.0001" value="0.001">
       
-      <!-- TOGGLE ZOOM MODE -->
-      <label style="margin-top: 12px; border-top: 1px solid #444; padding-top: 12px;">
-        <input type="checkbox" id="zoomModeToggle"> 🔍 Zoom 2D (immagine)
-      </label>
-      <div style="font-size: 11px; color:#aaa; margin-top: -4px; margin-bottom: 8px;">
-        Off = Zoom 3D (camera) | On = Zoom 2D (canvas)
-      </div>
-      
-      <!-- NUOVO CONTROLLO: Max Zoom 2D -->
-      <label>Max zoom 2D <span id="maxZoom2dVal" class="value-display">5.0</span></label>
+      <!-- Solo zoom 2D – nessun toggle -->
+      <div style="margin-top: 12px; border-top: 1px solid #444; padding-top: 12px; font-weight: bold; color: #88ddff;">🔍 ZOOM 2D</div>
+      <label>Max zoom <span id="maxZoom2dVal" class="value-display">5.0</span></label>
       <input type="range" id="maxZoom2dSlider" min="1.5" max="10" step="0.1" value="5.0">
       
       <button id="applySettingsBtn" style="background: #2a6f5c; margin-top: 8px;">🔄 Applica impostazioni</button>
@@ -2059,10 +1980,10 @@
     <div style="font-weight: bold; margin: 8px 0 4px 0;">🖼️ SFONDO</div>
     <div class="file-input-label" id="loadBackgroundBtn">📁 Carica immagine sfondo</div>
     <button id="resetBackgroundBtn">↺ Ripristina sfondo predefinito</button>
-    <div style="font-size: 11px; margin-top: 8px; color:#aaa;">L'immagine 'asset/background.png' viene caricata automaticamente.</div>
-    <div style="font-size: 11px; opacity:0.7; margin-top: 12px; text-align: center;">Scroll verticale = frame | 🔍 Toggle Zoom 2D/3D | Premi <kbd>U</kbd> per controlli</div>
+    <div style="font-size: 11px; margin-top: 8px; color:#aaa;">L'immagine 'asset/background.webp' viene caricata automaticamente.</div>
+    <div style="font-size: 11px; opacity:0.7; margin-top: 12px; text-align: center;">Scroll verticale = frame | 🔍 Pinch per zoom 2D | Premi <kbd>U</kbd> per controlli</div>
   </div>
-  <div id="hint">⬇️ Scroll / swipe: frame<br>🔍 Toggle Zoom 2D/3D<br>🎛️ Premi <kbd>U</kbd> per controlli</div>
+  <div id="hint">⬇️ Scroll / swipe: frame<br>🔍 Pinch: zoom 2D<br>🎛️ Premi <kbd>U</kbd> per controlli</div>
   <div id="status">Inizializzazione...</div>
 </div>
 </body>
