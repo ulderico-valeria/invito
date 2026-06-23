@@ -108,6 +108,12 @@
     pointer-events: auto;
   }
 
+  /* PULSANTI UI NASCOSTI */
+  #toggleUI,
+  #mobileMenuBtn {
+    display: none !important;
+  }
+
   #scrollHint {
     position: fixed;
     bottom: 30px;
@@ -128,48 +134,6 @@
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(8px); }
   }
-
-  #mobileMenuBtn {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: rgba(30,30,40,0.9);
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(255,255,255,0.25);
-    color: white;
-    font-size: 24px;
-    width: 48px;
-    height: 48px;
-    border-radius: 40px;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    z-index: 30;
-    touch-action: manipulation;
-  }
-  #mobileMenuBtn:active { transform: scale(0.94); background: rgba(50,50,70,0.9); }
-
-  #toggleUI {
-    position: fixed;
-    bottom: 20px;
-    left: 20px;
-    background: rgba(30,30,40,0.9);
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(255,255,255,0.25);
-    color: white;
-    font-size: 24px;
-    font-weight: bold;
-    width: 48px;
-    height: 48px;
-    border-radius: 40px;
-    cursor: pointer;
-    text-align: center;
-    line-height: 48px;
-    user-select: none;
-    touch-action: manipulation;
-  }
-  #toggleUI:active { transform: scale(0.94); background: rgba(50,50,70,0.9); }
 
   .ui-panel {
     position: fixed;
@@ -528,11 +492,11 @@
     // ===== BURST PARTICLES =====
     let burstParticles = [];
     let burstEnabled = false;
-    let burstCount = 3;               // Valore richiesto
-    let burstSpeed = 0.1;            // Valore richiesto
-    let burstSize = 0.01;            // Valore richiesto
-    let burstSpreadDeg = 25;         // Valore richiesto
-    let burstDepth = 0.5;            // Valore richiesto
+    let burstCount = 3;
+    let burstSpeed = 0.1;
+    let burstSize = 0.01;
+    let burstSpreadDeg = 3;          // SPREAD 3°
+    let burstDepth = 0.5;
     let burstColor = new THREE.Color('#39FBFE');
 
     const raycaster = new THREE.Raycaster();
@@ -562,13 +526,15 @@
       if (maxZoom2dVal) maxZoom2dVal.textContent = "5.0";
     }
 
-    // ===== BURST CONTROLS con valori predefiniti richiesti =====
+    // ===== BURST CONTROLS con valori predefiniti =====
     if (burstToggle) {
       burstToggle.addEventListener('change', (e) => {
         burstEnabled = e.target.checked;
         setStatus(burstEnabled ? '💥 Scoppio bollicine attivo (clicca sul 3D)' : '💥 Scoppio bollicine disattivato');
       });
-      burstToggle.checked = false;
+      // ATTIVATO DI DEFAULT
+      burstToggle.checked = true;
+      burstEnabled = true;
     }
 
     if (burstCountSlider) {
@@ -611,10 +577,10 @@
         burstSpreadDeg = parseFloat(burstSpreadSlider.value);
         if (burstSpreadVal) burstSpreadVal.textContent = burstSpreadDeg.toFixed(0) + '°';
       });
-      burstSpreadSlider.value = "25";
-      burstSpreadSlider.min = "5";
+      burstSpreadSlider.value = "3";      // SPREAD 3
+      burstSpreadSlider.min = "1";
       burstSpreadSlider.max = "180";
-      if (burstSpreadVal) burstSpreadVal.textContent = "25°";
+      if (burstSpreadVal) burstSpreadVal.textContent = "3°";
     }
 
     if (burstDepthSlider) {
@@ -1594,21 +1560,8 @@
       }, 2000);
     });
     
-    if (isMobile) {
-      mobileMenuBtn.style.display = 'flex';
-      mobileMenuBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const panel = document.querySelector('.ui-panel');
-        const isVisible = uiElements.style.display !== 'none';
-        uiElements.style.display = isVisible ? 'none' : 'block';
-        if (!isVisible) {
-          setTimeout(() => {
-            panel.scrollTop = 0;
-          }, 50);
-        }
-      });
-    }
-    
+    // Pulsanti UI nascosti – non serve gestire click su toggleUI perché non visibile
+    // Ma manteniamo la scorciatoia U per aprire il pannello
     let uiVisible = false;
     function toggleUI() {
       uiVisible = !uiVisible;
@@ -1616,7 +1569,7 @@
       if (uiVisible) {
         const panel = document.querySelector('.ui-panel');
         setTimeout(() => {
-          panel.scrollTop = 0;
+          if (panel) panel.scrollTop = 0;
         }, 50);
       }
     }
@@ -1703,11 +1656,11 @@
           transparent: true,
           opacity: 1.0,
           blending: THREE.NormalBlending,
-          depthTest: false,   // <-- sempre davanti
+          depthTest: false,
           depthWrite: false
         });
         const sprite = new THREE.Sprite(mat);
-        sprite.renderOrder = 999; // forzato il rendering dopo tutto
+        sprite.renderOrder = 999;
         sprite.position.copy(position);
         sprite.position.x += (Math.random() - 0.5) * 0.02;
         sprite.position.z += (Math.random() - 0.5) * 0.02;
@@ -2050,6 +2003,10 @@
     
     resetZoom2D();
     
+    // Assicura che lo scoppio sia attivo
+    burstToggle.checked = true;
+    burstEnabled = true;
+    
     let lastFrameTime = performance.now();
     function animate() {
       const now = performance.now();
@@ -2125,13 +2082,14 @@
   <img id="background-image" alt="background" style="display:block">
 </div>
 
+<!-- Pulsanti UI sono nascosti via CSS -->
 <div id="mobileMenuBtn">☰</div>
 <div id="debugOverlay">FPS: --<br>Pixel ratio: --<br>Canvas: --x--</div>
 <div id="canvas-wrapper"></div>
 
 <!-- UI -->
 <div class="ui-elements">
-  <div id="toggleUI">🎛️</div>
+  <!-- Il pulsante #toggleUI non è più visibile -->
   <div id="uiPanel" class="ui-panel">
     <div style="font-weight: bold; margin-bottom: 6px;">🎨 CONTROLLI FX</div>
     
@@ -2199,15 +2157,15 @@
     <!-- ===== SEZIONE BURST (valori predefiniti bassi) ===== -->
     <div style="background: rgba(200,100,255,0.1); border-radius: 12px; padding: 10px; margin-bottom: 8px; border: 1px solid rgba(200,100,255,0.3);">
       <div style="font-weight: bold; color: #dd99ff; margin-bottom: 6px; font-size: 12px;">💥 SCOPPIO BOLLICINE (piano virtuale)</div>
-      <label><input type="checkbox" id="burstToggle"> 💥 Attiva (clicca sul 3D)</label>
+      <label><input type="checkbox" id="burstToggle" checked> 💥 Attiva (clicca sul 3D)</label>
       <label>🔢 Quantità <span id="burstCountVal" class="value-display">3</span></label>
       <input type="range" id="burstCount" min="1" max="50" step="1" value="3">
       <label>⚡ Velocità <span id="burstSpeedVal" class="value-display">0.1</span></label>
       <input type="range" id="burstSpeed" min="0.1" max="5.0" step="0.1" value="0.1">
       <label>📏 Dimensione <span id="burstSizeVal" class="value-display">0.01</span></label>
       <input type="range" id="burstSize" min="0.005" max="0.3" step="0.005" value="0.01">
-      <label>📐 Spread <span id="burstSpreadVal" class="value-display">25°</span></label>
-      <input type="range" id="burstSpread" min="5" max="180" step="1" value="25">
+      <label>📐 Spread <span id="burstSpreadVal" class="value-display">3°</span></label>
+      <input type="range" id="burstSpread" min="1" max="180" step="1" value="3">
       <label>📏 Profondità piano <span id="burstDepthVal" class="value-display">0.5</span></label>
       <input type="range" id="burstDepth" min="0.1" max="6.0" step="0.1" value="0.5">
       <div style="font-size: 10px; margin-top: 4px; color:#aaa;">Le bollicine partono da un piano virtuale e sono sempre davanti al modello.</div>
@@ -2281,7 +2239,7 @@
     <div style="font-size: 11px; margin-top: 8px; color:#aaa;">L'immagine 'asset/background.webp' viene caricata automaticamente.</div>
     <div style="font-size: 11px; opacity:0.7; margin-top: 12px; text-align: center;">Scroll verticale = frame | 🔍 Pinch per zoom 2D | 💥 Scoppio su piano virtuale | Premi <kbd>U</kbd> per controlli</div>
   </div>
-  <div id="hint">⬇️ Scroll / swipe: frame<br>🔍 Pinch: zoom 2D<br>💥 Attiva scoppio bollicine (sempre in primo piano)<br>🎛️ Premi <kbd>U</kbd> per controlli</div>
+  <div id="hint">⬇️ Scroll / swipe: frame<br>🔍 Pinch: zoom 2D<br>💥 Scoppio attivo (click/tocco)<br>🎛️ Premi <kbd>U</kbd> per controlli</div>
   <div id="status">Inizializzazione...</div>
 </div>
 </body>
