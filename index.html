@@ -517,14 +517,13 @@
     // Per pinch 2D
     let prevPinchDist2d = 0;
     let pinchStartScale = 1;
-    let pinchCenterX = 0, pinchCenterY = 0;
 
-    // Riferimento al canvas wrapper
-    const canvasWrapper = document.getElementById('canvas-wrapper');
-    const canvasEl = document.querySelector('canvas'); // sarà spostato nel wrapper
+    // Riferimento al canvas (verrà impostato dopo la creazione)
+    let canvasEl = null;
 
     // Funzione per aggiornare la trasformazione 2D
     function updateCanvasTransform() {
+      if (!canvasEl) return;
       if (zoomMode === '2d') {
         canvasEl.style.transform = `translate(${panX2d}px, ${panY2d}px) scale(${scale2d})`;
       } else {
@@ -767,12 +766,14 @@
     renderer.shadowMap.enabled = false;
     renderer.outputEncoding = THREE.sRGBEncoding;
     
-    // Inserisci il canvas nel wrapper
+    // Inserisci il canvas nel wrapper e salva il riferimento
+    const canvasWrapper = document.getElementById('canvas-wrapper');
     if (canvasWrapper) {
       canvasWrapper.appendChild(renderer.domElement);
     } else {
       document.body.appendChild(renderer.domElement);
     }
+    canvasEl = renderer.domElement; // <-- riferimento diretto
     
     composer = new EffectComposer(renderer);
     const renderPass = new RenderPass(scene, null);
@@ -1594,8 +1595,6 @@
         }, 50);
       }
     }
-    // All'avvio la UI è nascosta (CSS), ma dopo il caricamento l'utente può aprirla con U o col pulsante
-    // Impostiamo display a 'none' per sicurezza
     uiElements.style.display = 'none';
     window.addEventListener('keydown', (e) => {
       if (e.key === 'u' || e.key === 'U') {
@@ -1625,29 +1624,22 @@
       if (zoomMode === '2d') {
         // Modalità 2D: pan con una dita, pinch con due
         if (e.touches.length === 1) {
-          // Inizia pan
           isPanning = true;
           panStartX = e.touches[0].clientX - panX2d;
           panStartY = e.touches[0].clientY - panY2d;
         } else if (e.touches.length === 2) {
-          // Inizia pinch
           e.preventDefault();
           const dx = e.touches[0].clientX - e.touches[1].clientX;
           const dy = e.touches[0].clientY - e.touches[1].clientY;
           prevPinchDist2d = Math.hypot(dx, dy);
           pinchStartScale = scale2d;
-          // Centro del pinch
-          pinchCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-          pinchCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
         }
       } else {
         // Modalità 3D: scrub con una dita, pinch con due
         if (e.touches.length === 1) {
-          // Scrub
           touchStartY = e.touches[0].clientY;
           touchAccum = 0;
         } else if (e.touches.length === 2) {
-          // Pinch 3D
           e.preventDefault();
           const dx = e.touches[0].clientX - e.touches[1].clientX;
           const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -1661,15 +1653,12 @@
       if (isTouchOnPanel) return;
 
       if (zoomMode === '2d') {
-        // Gestione 2D
         if (e.touches.length === 1 && isPanning) {
-          // Pan
           e.preventDefault();
           panX2d = e.touches[0].clientX - panStartX;
           panY2d = e.touches[0].clientY - panStartY;
           updateCanvasTransform();
         } else if (e.touches.length === 2) {
-          // Pinch zoom 2D
           e.preventDefault();
           const dx = e.touches[0].clientX - e.touches[1].clientX;
           const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -1683,7 +1672,6 @@
       } else {
         // Modalità 3D
         if (e.touches.length === 1) {
-          // Scrub
           const delta = touchStartY - e.touches[0].clientY;
           touchStartY = e.touches[0].clientY;
           touchAccum += delta;
@@ -1696,7 +1684,6 @@
             }
           }
         } else if (e.touches.length === 2) {
-          // Pinch 3D (zoom camera)
           e.preventDefault();
           const dx = e.touches[0].clientX - e.touches[1].clientX;
           const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -1756,8 +1743,6 @@
         bgImg.classList.remove('blurred');
       }
       setStatus('Caricamento completato');
-      // Mostra la UI (solo se l'utente vuole, ma rimane nascosta finché non preme U o il pulsante)
-      // Per coerenza, lasciamo nascosta; l'utente può premere U.
     }
     setTimeout(hideLoader, 10000);
 
@@ -1940,7 +1925,7 @@
 <!-- CANVAS WRAPPER -->
 <div id="canvas-wrapper"></div>
 
-<!-- UI: inizialmente nascosta (display:none via CSS) -->
+<!-- UI nascosta all'avvio -->
 <div class="ui-elements">
   <div id="toggleUI">🎛️</div>
   <div id="uiPanel" class="ui-panel">
