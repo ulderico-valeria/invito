@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>GLB Frame Scrubber - Zoom 2D</title>
+<title>GLB Frame Scrubber - Burst Bubbles</title>
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
 <style>
@@ -425,9 +425,20 @@
     const envIntensitySlider = document.getElementById('envIntensity');
     const envIntensityVal = document.getElementById('envIntensityVal');
 
-    // Controllo max zoom 2D
+    // Controlli zoom 2D
     const maxZoom2dSlider = document.getElementById('maxZoom2dSlider');
     const maxZoom2dVal = document.getElementById('maxZoom2dVal');
+
+    // ===== CONTROLLI BURST BOLLICINE =====
+    const burstToggle = document.getElementById('burstToggle');
+    const burstCountSlider = document.getElementById('burstCount');
+    const burstCountVal = document.getElementById('burstCountVal');
+    const burstSpeedSlider = document.getElementById('burstSpeed');
+    const burstSpeedVal = document.getElementById('burstSpeedVal');
+    const burstSizeSlider = document.getElementById('burstSize');
+    const burstSizeVal = document.getElementById('burstSizeVal');
+    const burstSpreadSlider = document.getElementById('burstSpread');
+    const burstSpreadVal = document.getElementById('burstSpreadVal');
 
     let currentEnvTexture = null;
     let composer = null;
@@ -509,6 +520,19 @@
     let pinchCenterX = 0, pinchCenterY = 0;
     let isTouchOnPanel = false;
 
+    // ===== BURST PARTICLES =====
+    let burstParticles = [];
+    let burstEnabled = false;
+    let burstCount = 15;
+    let burstSpeed = 2.0;
+    let burstSize = 0.08;
+    let burstSpreadDeg = 45;
+    let burstColor = new THREE.Color('#39FBFE');
+
+    // Raycaster per il burst
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+
     let canvasEl = null;
 
     function updateCanvasTransform() {
@@ -531,6 +555,51 @@
       });
       maxZoom2dSlider.value = "5.0";
       if (maxZoom2dVal) maxZoom2dVal.textContent = "5.0";
+    }
+
+    // ===== BURST CONTROLS =====
+    if (burstToggle) {
+      burstToggle.addEventListener('change', (e) => {
+        burstEnabled = e.target.checked;
+        setStatus(burstEnabled ? '💥 Scoppio bollicine attivo (clicca sul 3D)' : '💥 Scoppio bollicine disattivato');
+      });
+      burstToggle.checked = false;
+    }
+
+    if (burstCountSlider) {
+      burstCountSlider.addEventListener('input', () => {
+        burstCount = parseInt(burstCountSlider.value);
+        if (burstCountVal) burstCountVal.textContent = burstCount;
+      });
+      burstCountSlider.value = "15";
+      if (burstCountVal) burstCountVal.textContent = "15";
+    }
+
+    if (burstSpeedSlider) {
+      burstSpeedSlider.addEventListener('input', () => {
+        burstSpeed = parseFloat(burstSpeedSlider.value);
+        if (burstSpeedVal) burstSpeedVal.textContent = burstSpeed.toFixed(1);
+      });
+      burstSpeedSlider.value = "2.0";
+      if (burstSpeedVal) burstSpeedVal.textContent = "2.0";
+    }
+
+    if (burstSizeSlider) {
+      burstSizeSlider.addEventListener('input', () => {
+        burstSize = parseFloat(burstSizeSlider.value);
+        if (burstSizeVal) burstSizeVal.textContent = burstSize.toFixed(2);
+      });
+      burstSizeSlider.value = "0.08";
+      if (burstSizeVal) burstSizeVal.textContent = "0.08";
+    }
+
+    if (burstSpreadSlider) {
+      burstSpreadSlider.addEventListener('input', () => {
+        burstSpreadDeg = parseFloat(burstSpreadSlider.value);
+        if (burstSpreadVal) burstSpreadVal.textContent = burstSpreadDeg.toFixed(0) + '°';
+      });
+      burstSpreadSlider.value = "45";
+      if (burstSpreadVal) burstSpreadVal.textContent = "45°";
     }
 
     // Funzioni qualità...
@@ -631,6 +700,12 @@
       for (let sprite of particleSprites) {
         if (sprite.material) sprite.material.map = sharedTexture;
       }
+      // Aggiorna anche le texture delle burst particles esistenti
+      for (let bp of burstParticles) {
+        if (bp.sprite && bp.sprite.material) {
+          bp.sprite.material.map = sharedTexture;
+        }
+      }
     }
     
     loadBubbleTextureBtn.addEventListener('click', () => {
@@ -673,14 +748,14 @@
       setStatus(`Sfondo immagine: ${url.split('/').pop()}`);
     }
     function resetBackgroundToDefault() {
-      const defaultUrl = './asset/background.webp';
+      const defaultUrl = './asset/background.png';
       fetch(defaultUrl).then(resp => {
         if (resp.ok) setBackgroundImage(defaultUrl);
         else setBackgroundImage('');
       }).catch(() => setBackgroundImage(''));
     }
     function loadDefaultBackground() {
-      const defaultUrl = './asset/background.webp';
+      const defaultUrl = './asset/background.png';
       fetch(defaultUrl).then(resp => {
         if (resp.ok) setBackgroundImage(defaultUrl);
       }).catch(() => {});
@@ -1072,7 +1147,8 @@
         color: color,
         transparent: true,
         opacity: opacity,
-        blending: THREE.NormalBlending
+        blending: THREE.NormalBlending,
+        depthWrite: false
       });
       
       const baseRotSpeed = parseFloat(bubbleRotSpeedSlider.value) || 0.02;
@@ -1213,7 +1289,6 @@
       renderCamera.near = animatedCamera.near || baseCameraNear;
       renderCamera.far = animatedCamera.far || baseCameraFar;
       
-      // Mantieni zoom della camera a 1 (nessuna modifica 3D)
       renderCamera.zoom = animatedCamera.zoom || 1;
       
       renderCamera.aspect = window.innerWidth / window.innerHeight;
@@ -1527,10 +1602,159 @@
       }
     });
     
-    // GESTIONE TOUCH (solo 2D)
-    let touchStartY = 0;
-    let touchAccum = 0;
+    // ===== FUNZIONE BURST =====
+    function spawnBurst(position, normal) {
+      if (!burstEnabled) return;
+      if (!sharedTexture) return;
+      
+      const count = burstCount;
+      const speed = burstSpeed;
+      const size = burstSize;
+      const spreadRad = burstSpreadDeg * Math.PI / 180;
+      const color = new THREE.Color(particleColorPicker.value || '#39FBFE');
+      
+      // Direzione base: normale + componente verso l'alto
+      const baseDir = normal.clone();
+      // Aggiungi un po' di up per fare in modo che le bollicine vadano verso l'alto
+      baseDir.y += 0.5;
+      baseDir.normalize();
+      
+      for (let i = 0; i < count; i++) {
+        // Genera una direzione casuale all'interno del cono di spread
+        const angle = Math.random() * Math.PI * 2;
+        const spreadAngle = Math.random() * spreadRad;
+        
+        // Crea un vettore perpendicolare alla baseDir
+        let up = new THREE.Vector3(0, 1, 0);
+        if (Math.abs(baseDir.dot(up)) > 0.99) up.set(1, 0, 0);
+        const right = new THREE.Vector3().crossVectors(baseDir, up).normalize();
+        const localUp = new THREE.Vector3().crossVectors(right, baseDir).normalize();
+        
+        // Ruota la baseDir di spreadAngle attorno a un asse casuale perpendicolare
+        const rotAxis = new THREE.Vector3(
+          Math.cos(angle) * right.x + Math.sin(angle) * localUp.x,
+          Math.cos(angle) * right.y + Math.sin(angle) * localUp.y,
+          Math.cos(angle) * right.z + Math.sin(angle) * localUp.z
+        ).normalize();
+        
+        const dir = baseDir.clone().applyAxisAngle(rotAxis, spreadAngle * Math.random());
+        dir.normalize();
+        
+        // Velocità con variazione random
+        const speedVariation = 0.5 + Math.random() * 0.8;
+        const finalSpeed = speed * speedVariation;
+        const velocity = dir.multiplyScalar(finalSpeed);
+        // Aggiungi un po' di turbolenza casuale
+        velocity.x += (Math.random() - 0.5) * 0.2;
+        velocity.z += (Math.random() - 0.5) * 0.2;
+        
+        // Dimensione casuale
+        const sizeVar = 0.6 + Math.random() * 0.8;
+        const finalSize = size * sizeVar;
+        
+        // Crea la sprite
+        const mat = new THREE.SpriteMaterial({
+          map: sharedTexture,
+          color: color,
+          transparent: true,
+          opacity: 1.0,
+          blending: THREE.NormalBlending,
+          depthWrite: false
+        });
+        const sprite = new THREE.Sprite(mat);
+        sprite.position.copy(position);
+        // Aggiungi una piccola offset casuale per evitare che tutte partano dallo stesso punto
+        sprite.position.x += (Math.random() - 0.5) * 0.02;
+        sprite.position.z += (Math.random() - 0.5) * 0.02;
+        sprite.scale.set(finalSize, finalSize, 1);
+        
+        // Rotazione iniziale casuale
+        sprite.material.rotation = Math.random() * Math.PI * 2;
+        
+        scene.add(sprite);
+        
+        // Aggiungi alla lista delle burst particles
+        burstParticles.push({
+          sprite: sprite,
+          velocity: velocity,
+          life: 1.0,
+          decay: 0.5 + Math.random() * 0.7, // durata vita 0.5-1.2 secondi
+          rotSpeed: (Math.random() - 0.5) * 0.08,
+          scale: finalSize
+        });
+      }
+    }
 
+    // ===== RAYCASTER PER CLICK/TOUCH =====
+    function getIntersection(clientX, clientY) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      
+      raycaster.setFromCamera(pointer, renderCamera);
+      
+      // Interseca con tutti i mesh nella scena (esclusi i particle sprites)
+      const meshes = [];
+      scene.traverse((obj) => {
+        if (obj.isMesh && obj.type === 'Mesh') {
+          meshes.push(obj);
+        }
+      });
+      
+      const intersects = raycaster.intersectObjects(meshes);
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        return {
+          point: hit.point,
+          normal: hit.face.normal.clone().transformDirection(hit.object.matrixWorld)
+        };
+      }
+      return null;
+    }
+
+    // ===== EVENTI MOUSE =====
+    function onPointerDown(event) {
+      if (isTouchOnPanel) return;
+      if (uiElements.style.display === 'block') {
+        const panel = document.querySelector('.ui-panel');
+        const rect = panel.getBoundingClientRect();
+        const x = event.clientX || event.pageX;
+        const y = event.clientY || event.pageY;
+        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+          return;
+        }
+      }
+      
+      // Se stiamo facendo pan o pinch, non attivare il burst
+      if (isPanning || isScrubbing) return;
+      
+      // Se il burst è disattivato, non fare nulla
+      if (!burstEnabled) return;
+      
+      const clientX = event.clientX || event.pageX;
+      const clientY = event.clientY || event.pageY;
+      
+      const hit = getIntersection(clientX, clientY);
+      if (hit) {
+        spawnBurst(hit.point, hit.normal);
+      } else {
+        // Se non c'è intersezione, spawna a una distanza fissa davanti alla camera
+        const pos = new THREE.Vector3();
+        renderCamera.getWorldPosition(pos);
+        const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(renderCamera.quaternion);
+        const point = pos.clone().add(dir.clone().multiplyScalar(5));
+        const normal = new THREE.Vector3(0, 1, 0);
+        spawnBurst(point, normal);
+      }
+    }
+
+    // Eventi mouse
+    window.addEventListener('click', onPointerDown);
+    // Touch event (già gestiti per lo scrub, ma aggiungiamo il burst)
+    // Modifichiamo il touchstart esistente per includere il burst
+    const originalTouchStart = window._touchStartHandler;
+    
+    // Sostituiamo il touchstart per gestire anche il burst
     window.addEventListener('touchstart', (e) => {
       if (uiElements.style.display === 'block') {
         const panel = document.querySelector('.ui-panel');
@@ -1544,8 +1768,24 @@
       }
       isTouchOnPanel = false;
 
+      // Se il burst è attivo e non siamo in pan/scrub, spawna
+      if (burstEnabled && !isPanning && !isScrubbing && e.touches.length === 1) {
+        const touch = e.touches[0];
+        const hit = getIntersection(touch.clientX, touch.clientY);
+        if (hit) {
+          spawnBurst(hit.point, hit.normal);
+        } else {
+          const pos = new THREE.Vector3();
+          renderCamera.getWorldPosition(pos);
+          const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(renderCamera.quaternion);
+          const point = pos.clone().add(dir.clone().multiplyScalar(5));
+          const normal = new THREE.Vector3(0, 1, 0);
+          spawnBurst(point, normal);
+        }
+      }
+
+      // Gestione touch esistente (pan/scrub/pinch)
       if (e.touches.length === 1) {
-        // Se siamo a zoom base e pan zero, facciamo scrub, altrimenti pan
         if (scale2d === 1 && panX2d === 0 && panY2d === 0) {
           isScrubbing = true;
           isPanning = false;
@@ -1572,6 +1812,7 @@
       }
     }, { passive: false });
 
+    // Sostituiamo il touchmove esistente
     window.addEventListener('touchmove', (e) => {
       if (isTouchOnPanel) return;
 
@@ -1604,7 +1845,6 @@
         let newScale = pinchStartScale * ratio;
         newScale = Math.max(1, Math.min(maxZoom2d, newScale));
 
-        // Calcola pan centrato
         const cx = pinchCenterX;
         const cy = pinchCenterY;
         const oldScale = pinchStartScale;
@@ -1623,15 +1863,7 @@
       }
     }, { passive: false });
 
-    window.addEventListener('touchend', (e) => {
-      if (e.touches.length === 0) {
-        isTouchOnPanel = false;
-        isPanning = false;
-        isScrubbing = false;
-      }
-    });
-
-    // Wheel per frame stepping (rimane attivo)
+    // Wheel per frame stepping
     window.addEventListener('wheel', (e) => {
       if (uiElements.style.display === 'block') {
         const panel = document.querySelector('.ui-panel');
@@ -1787,7 +2019,6 @@
     loadInitialEnvironment();
     loadDefaultBackground();
     
-    // Imposta zoom 2D di default e aggiorna trasformazione
     resetZoom2D();
     
     let lastFrameTime = performance.now();
@@ -1827,6 +2058,29 @@
       if (particleEnabled) updateParticles();
       updateArmatureRotation(delta);
       applyOffset();
+      
+      // ===== AGGIORNA BURST PARTICLES =====
+      for (let i = burstParticles.length - 1; i >= 0; i--) {
+        const bp = burstParticles[i];
+        bp.life -= delta * bp.decay;
+        bp.sprite.material.opacity = Math.max(0, bp.life);
+        // Movimento
+        bp.sprite.position.x += bp.velocity.x * delta;
+        bp.sprite.position.y += bp.velocity.y * delta;
+        bp.sprite.position.z += bp.velocity.z * delta;
+        // Rotazione
+        bp.sprite.material.rotation += bp.rotSpeed * delta * 10;
+        // Leggera decelerazione
+        bp.velocity.multiplyScalar(1 - delta * 0.15);
+        // Leggera accelerazione verso l'alto
+        bp.velocity.y += delta * 0.05;
+        
+        if (bp.life <= 0) {
+          scene.remove(bp.sprite);
+          bp.sprite.material.dispose();
+          burstParticles.splice(i, 1);
+        }
+      }
       
       renderPass.camera = renderCamera;
       composer.render();
@@ -1907,7 +2161,6 @@
       <label>Bias ombre <span id="shadowBiasVal" class="value-display">0.0010</span></label>
       <input type="range" id="shadowBias" min="0" max="0.02" step="0.0001" value="0.001">
       
-      <!-- Solo zoom 2D – nessun toggle -->
       <div style="margin-top: 12px; border-top: 1px solid #444; padding-top: 12px; font-weight: bold; color: #88ddff;">🔍 ZOOM 2D</div>
       <label>Max zoom <span id="maxZoom2dVal" class="value-display">5.0</span></label>
       <input type="range" id="maxZoom2dSlider" min="1.5" max="10" step="0.1" value="5.0">
@@ -1917,6 +2170,24 @@
     </div>
     
     <hr>
+
+    <!-- ===== NUOVA SEZIONE BURST ===== -->
+    <div style="background: rgba(200,100,255,0.1); border-radius: 12px; padding: 10px; margin-bottom: 8px; border: 1px solid rgba(200,100,255,0.3);">
+      <div style="font-weight: bold; color: #dd99ff; margin-bottom: 6px; font-size: 12px;">💥 SCOPPIO BOLLICINE</div>
+      <label><input type="checkbox" id="burstToggle"> 💥 Attiva (clicca sul 3D)</label>
+      <label>🔢 Quantità <span id="burstCountVal" class="value-display">15</span></label>
+      <input type="range" id="burstCount" min="1" max="50" step="1" value="15">
+      <label>⚡ Velocità <span id="burstSpeedVal" class="value-display">2.0</span></label>
+      <input type="range" id="burstSpeed" min="0.5" max="6.0" step="0.1" value="2.0">
+      <label>📏 Dimensione <span id="burstSizeVal" class="value-display">0.08</span></label>
+      <input type="range" id="burstSize" min="0.02" max="0.4" step="0.01" value="0.08">
+      <label>📐 Spread <span id="burstSpreadVal" class="value-display">45°</span></label>
+      <input type="range" id="burstSpread" min="10" max="180" step="1" value="45">
+      <div style="font-size: 10px; margin-top: 4px; color:#aaa;">Clicca/tocca sul modello 3D per generare un'esplosione di bollicine</div>
+    </div>
+
+    <hr>
+
     <label>🌞 Esposizione <span id="exposureVal" class="value-display">1.00</span></label>
     <input type="range" id="exposure" min="0.2" max="2.0" step="0.01" value="1.0">
     <label>🔄 Rotazione HDR <span id="rotVal" class="value-display">0.00</span></label>
@@ -1980,10 +2251,10 @@
     <div style="font-weight: bold; margin: 8px 0 4px 0;">🖼️ SFONDO</div>
     <div class="file-input-label" id="loadBackgroundBtn">📁 Carica immagine sfondo</div>
     <button id="resetBackgroundBtn">↺ Ripristina sfondo predefinito</button>
-    <div style="font-size: 11px; margin-top: 8px; color:#aaa;">L'immagine 'asset/background.webp' viene caricata automaticamente.</div>
-    <div style="font-size: 11px; opacity:0.7; margin-top: 12px; text-align: center;">Scroll verticale = frame | 🔍 Pinch per zoom 2D | Premi <kbd>U</kbd> per controlli</div>
+    <div style="font-size: 11px; margin-top: 8px; color:#aaa;">L'immagine 'asset/background.png' viene caricata automaticamente.</div>
+    <div style="font-size: 11px; opacity:0.7; margin-top: 12px; text-align: center;">Scroll verticale = frame | 🔍 Pinch per zoom 2D | 💥 Attiva scoppio bollicine | Premi <kbd>U</kbd> per controlli</div>
   </div>
-  <div id="hint">⬇️ Scroll / swipe: frame<br>🔍 Pinch: zoom 2D<br>🎛️ Premi <kbd>U</kbd> per controlli</div>
+  <div id="hint">⬇️ Scroll / swipe: frame<br>🔍 Pinch: zoom 2D<br>💥 Attiva scoppio bollicine nella UI<br>🎛️ Premi <kbd>U</kbd> per controlli</div>
   <div id="status">Inizializzazione...</div>
 </div>
 </body>
