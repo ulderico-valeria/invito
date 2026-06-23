@@ -97,7 +97,7 @@
     100% { transform: rotate(360deg); }
   }
 
-  /* UI */
+  /* UI – nascosta all'avvio */
   .ui-elements {
     position: fixed;
     top: 0;
@@ -106,6 +106,7 @@
     height: 100%;
     pointer-events: none;
     z-index: 20;
+    display: none; /* nascosta fino a interazione */
   }
   .ui-elements > * {
     pointer-events: auto;
@@ -552,14 +553,10 @@
       zoomModeToggle.checked = (mode === '2d');
       
       if (mode === '2d') {
-        // Disabilita zoom 3D e resetta
         resetZoom3D();
-        // Resetta anche eventuali offset di pan/zoom 2D
         resetZoom2D();
-        // Disabilita lo scrub temporaneamente? Lo gestiamo nel touch
         setStatus('🔍 Zoom 2D attivo – una dita pan, due dita zoom');
       } else {
-        // Resetta zoom 2D e torna a 3D
         resetZoom2D();
         resetZoom3D();
         setStatus('🎥 Zoom 3D attivo – una dita scrub, due dita zoom camera');
@@ -1597,6 +1594,8 @@
         }, 50);
       }
     }
+    // All'avvio la UI è nascosta (CSS), ma dopo il caricamento l'utente può aprirla con U o col pulsante
+    // Impostiamo display a 'none' per sicurezza
     uiElements.style.display = 'none';
     window.addEventListener('keydown', (e) => {
       if (e.key === 'u' || e.key === 'U') {
@@ -1608,10 +1607,6 @@
     // GESTIONE TOUCH UNIFICATA
     let touchStartY = 0;
     let touchAccum = 0;
-
-    // Per pan 2D
-    let panStartX = 0, panStartY = 0;
-    let isPanning = false;
 
     window.addEventListener('touchstart', (e) => {
       // Se il tocco è sul pannello UI, blocca
@@ -1683,8 +1678,6 @@
           let newScale = pinchStartScale * ratio;
           newScale = Math.max(0.5, Math.min(5, newScale));
           scale2d = newScale;
-          // Aggiorna il centro del pinch per mantenere il punto sotto le dita
-          // (opzionale: si può anche non fare, ma per semplicità applichiamo solo lo zoom)
           updateCanvasTransform();
         }
       } else {
@@ -1763,6 +1756,8 @@
         bgImg.classList.remove('blurred');
       }
       setStatus('Caricamento completato');
+      // Mostra la UI (solo se l'utente vuole, ma rimane nascosta finché non preme U o il pulsante)
+      // Per coerenza, lasciamo nascosta; l'utente può premere U.
     }
     setTimeout(hideLoader, 10000);
 
@@ -1945,6 +1940,7 @@
 <!-- CANVAS WRAPPER -->
 <div id="canvas-wrapper"></div>
 
+<!-- UI: inizialmente nascosta (display:none via CSS) -->
 <div class="ui-elements">
   <div id="toggleUI">🎛️</div>
   <div id="uiPanel" class="ui-panel">
