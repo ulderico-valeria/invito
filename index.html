@@ -429,7 +429,7 @@
     const maxZoom2dSlider = document.getElementById('maxZoom2dSlider');
     const maxZoom2dVal = document.getElementById('maxZoom2dVal');
 
-    // ===== CONTROLLI BURST BOLLICINE =====
+    // Controlli burst
     const burstToggle = document.getElementById('burstToggle');
     const burstCountSlider = document.getElementById('burstCount');
     const burstCountVal = document.getElementById('burstCountVal');
@@ -520,6 +520,10 @@
     let pinchCenterX = 0, pinchCenterY = 0;
     let isTouchOnPanel = false;
 
+    // TOUCH VARIABILI GLOBALI
+    let touchStartY = 0;
+    let touchAccum = 0;
+
     // ===== BURST PARTICLES =====
     let burstParticles = [];
     let burstEnabled = false;
@@ -529,7 +533,6 @@
     let burstSpreadDeg = 45;
     let burstColor = new THREE.Color('#39FBFE');
 
-    // Raycaster per il burst
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
 
@@ -748,14 +751,14 @@
       setStatus(`Sfondo immagine: ${url.split('/').pop()}`);
     }
     function resetBackgroundToDefault() {
-      const defaultUrl = './asset/background.png';
+      const defaultUrl = './asset/background.webp';
       fetch(defaultUrl).then(resp => {
         if (resp.ok) setBackgroundImage(defaultUrl);
         else setBackgroundImage('');
       }).catch(() => setBackgroundImage(''));
     }
     function loadDefaultBackground() {
-      const defaultUrl = './asset/background.png';
+      const defaultUrl = './asset/background.webp';
       fetch(defaultUrl).then(resp => {
         if (resp.ok) setBackgroundImage(defaultUrl);
       }).catch(() => {});
@@ -1613,24 +1616,19 @@
       const spreadRad = burstSpreadDeg * Math.PI / 180;
       const color = new THREE.Color(particleColorPicker.value || '#39FBFE');
       
-      // Direzione base: normale + componente verso l'alto
       const baseDir = normal.clone();
-      // Aggiungi un po' di up per fare in modo che le bollicine vadano verso l'alto
       baseDir.y += 0.5;
       baseDir.normalize();
       
       for (let i = 0; i < count; i++) {
-        // Genera una direzione casuale all'interno del cono di spread
         const angle = Math.random() * Math.PI * 2;
         const spreadAngle = Math.random() * spreadRad;
         
-        // Crea un vettore perpendicolare alla baseDir
         let up = new THREE.Vector3(0, 1, 0);
         if (Math.abs(baseDir.dot(up)) > 0.99) up.set(1, 0, 0);
         const right = new THREE.Vector3().crossVectors(baseDir, up).normalize();
         const localUp = new THREE.Vector3().crossVectors(right, baseDir).normalize();
         
-        // Ruota la baseDir di spreadAngle attorno a un asse casuale perpendicolare
         const rotAxis = new THREE.Vector3(
           Math.cos(angle) * right.x + Math.sin(angle) * localUp.x,
           Math.cos(angle) * right.y + Math.sin(angle) * localUp.y,
@@ -1640,19 +1638,15 @@
         const dir = baseDir.clone().applyAxisAngle(rotAxis, spreadAngle * Math.random());
         dir.normalize();
         
-        // Velocità con variazione random
         const speedVariation = 0.5 + Math.random() * 0.8;
         const finalSpeed = speed * speedVariation;
         const velocity = dir.multiplyScalar(finalSpeed);
-        // Aggiungi un po' di turbolenza casuale
         velocity.x += (Math.random() - 0.5) * 0.2;
         velocity.z += (Math.random() - 0.5) * 0.2;
         
-        // Dimensione casuale
         const sizeVar = 0.6 + Math.random() * 0.8;
         const finalSize = size * sizeVar;
         
-        // Crea la sprite
         const mat = new THREE.SpriteMaterial({
           map: sharedTexture,
           color: color,
@@ -1663,22 +1657,18 @@
         });
         const sprite = new THREE.Sprite(mat);
         sprite.position.copy(position);
-        // Aggiungi una piccola offset casuale per evitare che tutte partano dallo stesso punto
         sprite.position.x += (Math.random() - 0.5) * 0.02;
         sprite.position.z += (Math.random() - 0.5) * 0.02;
         sprite.scale.set(finalSize, finalSize, 1);
-        
-        // Rotazione iniziale casuale
         sprite.material.rotation = Math.random() * Math.PI * 2;
         
         scene.add(sprite);
         
-        // Aggiungi alla lista delle burst particles
         burstParticles.push({
           sprite: sprite,
           velocity: velocity,
           life: 1.0,
-          decay: 0.5 + Math.random() * 0.7, // durata vita 0.5-1.2 secondi
+          decay: 0.5 + Math.random() * 0.7,
           rotSpeed: (Math.random() - 0.5) * 0.08,
           scale: finalSize
         });
@@ -1693,7 +1683,6 @@
       
       raycaster.setFromCamera(pointer, renderCamera);
       
-      // Interseca con tutti i mesh nella scena (esclusi i particle sprites)
       const meshes = [];
       scene.traverse((obj) => {
         if (obj.isMesh && obj.type === 'Mesh') {
@@ -1714,7 +1703,7 @@
 
     // ===== EVENTI MOUSE =====
     function onPointerDown(event) {
-      if (isTouchOnPanel) return;
+      // Se è un click sulla UI, ignoriamo
       if (uiElements.style.display === 'block') {
         const panel = document.querySelector('.ui-panel');
         const rect = panel.getBoundingClientRect();
@@ -1725,10 +1714,6 @@
         }
       }
       
-      // Se stiamo facendo pan o pinch, non attivare il burst
-      if (isPanning || isScrubbing) return;
-      
-      // Se il burst è disattivato, non fare nulla
       if (!burstEnabled) return;
       
       const clientX = event.clientX || event.pageX;
@@ -1738,7 +1723,6 @@
       if (hit) {
         spawnBurst(hit.point, hit.normal);
       } else {
-        // Se non c'è intersezione, spawna a una distanza fissa davanti alla camera
         const pos = new THREE.Vector3();
         renderCamera.getWorldPosition(pos);
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(renderCamera.quaternion);
@@ -1750,26 +1734,24 @@
 
     // Eventi mouse
     window.addEventListener('click', onPointerDown);
-    // Touch event (già gestiti per lo scrub, ma aggiungiamo il burst)
-    // Modifichiamo il touchstart esistente per includere il burst
-    const originalTouchStart = window._touchStartHandler;
     
-    // Sostituiamo il touchstart per gestire anche il burst
+    // Touch: usiamo lo stesso meccanismo, ma senza interferire con pan/scrub
+    // Aggiungiamo un gestore touch specifico per il burst
     window.addEventListener('touchstart', (e) => {
-      if (uiElements.style.display === 'block') {
-        const panel = document.querySelector('.ui-panel');
-        const rect = panel.getBoundingClientRect();
-        const touch = e.touches[0];
-        if (touch && touch.clientX >= rect.left && touch.clientX <= rect.right &&
-            touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
-          isTouchOnPanel = true;
-          return;
+      // Se il burst è attivo e c'è un solo tocco, genera lo scoppio
+      if (burstEnabled && e.touches.length === 1 && !isTouchOnPanel) {
+        // Controlla se il tocco è sulla UI
+        if (uiElements.style.display === 'block') {
+          const panel = document.querySelector('.ui-panel');
+          const rect = panel.getBoundingClientRect();
+          const touch = e.touches[0];
+          if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
+              touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+            isTouchOnPanel = true;
+            return;
+          }
         }
-      }
-      isTouchOnPanel = false;
-
-      // Se il burst è attivo e non siamo in pan/scrub, spawna
-      if (burstEnabled && !isPanning && !isScrubbing && e.touches.length === 1) {
+        
         const touch = e.touches[0];
         const hit = getIntersection(touch.clientX, touch.clientY);
         if (hit) {
@@ -1784,7 +1766,19 @@
         }
       }
 
-      // Gestione touch esistente (pan/scrub/pinch)
+      // Gestione touch esistente (pan/scrub/pinch) – la manteniamo identica
+      if (uiElements.style.display === 'block') {
+        const panel = document.querySelector('.ui-panel');
+        const rect = panel.getBoundingClientRect();
+        const touch = e.touches[0];
+        if (touch && touch.clientX >= rect.left && touch.clientX <= rect.right &&
+            touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+          isTouchOnPanel = true;
+          return;
+        }
+      }
+      isTouchOnPanel = false;
+
       if (e.touches.length === 1) {
         if (scale2d === 1 && panX2d === 0 && panY2d === 0) {
           isScrubbing = true;
@@ -1812,7 +1806,6 @@
       }
     }, { passive: false });
 
-    // Sostituiamo il touchmove esistente
     window.addEventListener('touchmove', (e) => {
       if (isTouchOnPanel) return;
 
@@ -1862,6 +1855,14 @@
         updateCanvasTransform();
       }
     }, { passive: false });
+
+    window.addEventListener('touchend', (e) => {
+      if (e.touches.length === 0) {
+        isTouchOnPanel = false;
+        isPanning = false;
+        isScrubbing = false;
+      }
+    });
 
     // Wheel per frame stepping
     window.addEventListener('wheel', (e) => {
@@ -2064,15 +2065,11 @@
         const bp = burstParticles[i];
         bp.life -= delta * bp.decay;
         bp.sprite.material.opacity = Math.max(0, bp.life);
-        // Movimento
         bp.sprite.position.x += bp.velocity.x * delta;
         bp.sprite.position.y += bp.velocity.y * delta;
         bp.sprite.position.z += bp.velocity.z * delta;
-        // Rotazione
         bp.sprite.material.rotation += bp.rotSpeed * delta * 10;
-        // Leggera decelerazione
         bp.velocity.multiplyScalar(1 - delta * 0.15);
-        // Leggera accelerazione verso l'alto
         bp.velocity.y += delta * 0.05;
         
         if (bp.life <= 0) {
@@ -2171,7 +2168,7 @@
     
     <hr>
 
-    <!-- ===== NUOVA SEZIONE BURST ===== -->
+    <!-- ===== SEZIONE BURST ===== -->
     <div style="background: rgba(200,100,255,0.1); border-radius: 12px; padding: 10px; margin-bottom: 8px; border: 1px solid rgba(200,100,255,0.3);">
       <div style="font-weight: bold; color: #dd99ff; margin-bottom: 6px; font-size: 12px;">💥 SCOPPIO BOLLICINE</div>
       <label><input type="checkbox" id="burstToggle"> 💥 Attiva (clicca sul 3D)</label>
@@ -2251,7 +2248,7 @@
     <div style="font-weight: bold; margin: 8px 0 4px 0;">🖼️ SFONDO</div>
     <div class="file-input-label" id="loadBackgroundBtn">📁 Carica immagine sfondo</div>
     <button id="resetBackgroundBtn">↺ Ripristina sfondo predefinito</button>
-    <div style="font-size: 11px; margin-top: 8px; color:#aaa;">L'immagine 'asset/background.png' viene caricata automaticamente.</div>
+    <div style="font-size: 11px; margin-top: 8px; color:#aaa;">L'immagine 'asset/background.webp' viene caricata automaticamente.</div>
     <div style="font-size: 11px; opacity:0.7; margin-top: 12px; text-align: center;">Scroll verticale = frame | 🔍 Pinch per zoom 2D | 💥 Attiva scoppio bollicine | Premi <kbd>U</kbd> per controlli</div>
   </div>
   <div id="hint">⬇️ Scroll / swipe: frame<br>🔍 Pinch: zoom 2D<br>💥 Attiva scoppio bollicine nella UI<br>🎛️ Premi <kbd>U</kbd> per controlli</div>
