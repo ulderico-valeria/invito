@@ -429,7 +429,7 @@
     const maxZoom2dSlider = document.getElementById('maxZoom2dSlider');
     const maxZoom2dVal = document.getElementById('maxZoom2dVal');
 
-    // Controlli burst
+    // ===== CONTROLLI BURST =====
     const burstToggle = document.getElementById('burstToggle');
     const burstCountSlider = document.getElementById('burstCount');
     const burstCountVal = document.getElementById('burstCountVal');
@@ -439,6 +439,8 @@
     const burstSizeVal = document.getElementById('burstSizeVal');
     const burstSpreadSlider = document.getElementById('burstSpread');
     const burstSpreadVal = document.getElementById('burstSpreadVal');
+    const burstDepthSlider = document.getElementById('burstDepth');
+    const burstDepthVal = document.getElementById('burstDepthVal');
 
     let currentEnvTexture = null;
     let composer = null;
@@ -520,21 +522,24 @@
     let pinchCenterX = 0, pinchCenterY = 0;
     let isTouchOnPanel = false;
 
-    // TOUCH VARIABILI GLOBALI
     let touchStartY = 0;
     let touchAccum = 0;
 
     // ===== BURST PARTICLES =====
     let burstParticles = [];
     let burstEnabled = false;
-    let burstCount = 15;
-    let burstSpeed = 2.0;
-    let burstSize = 0.08;
-    let burstSpreadDeg = 45;
+    let burstCount = 10;          // default più basso
+    let burstSpeed = 1.0;         // default più basso
+    let burstSize = 0.05;         // default più basso
+    let burstSpreadDeg = 30;      // default più basso
+    let burstDepth = 2.0;         // distanza del piano virtuale dalla camera
     let burstColor = new THREE.Color('#39FBFE');
 
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
+
+    // Piano virtuale per lo spawn (definito in spazio mondo, orientato verso la camera)
+    let virtualPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), -burstDepth);
 
     let canvasEl = null;
 
@@ -560,7 +565,7 @@
       if (maxZoom2dVal) maxZoom2dVal.textContent = "5.0";
     }
 
-    // ===== BURST CONTROLS =====
+    // ===== BURST CONTROLS (con range estesi e default bassi) =====
     if (burstToggle) {
       burstToggle.addEventListener('change', (e) => {
         burstEnabled = e.target.checked;
@@ -574,8 +579,10 @@
         burstCount = parseInt(burstCountSlider.value);
         if (burstCountVal) burstCountVal.textContent = burstCount;
       });
-      burstCountSlider.value = "15";
-      if (burstCountVal) burstCountVal.textContent = "15";
+      burstCountSlider.value = "10";
+      burstCountSlider.min = "1";
+      burstCountSlider.max = "50";
+      if (burstCountVal) burstCountVal.textContent = "10";
     }
 
     if (burstSpeedSlider) {
@@ -583,8 +590,11 @@
         burstSpeed = parseFloat(burstSpeedSlider.value);
         if (burstSpeedVal) burstSpeedVal.textContent = burstSpeed.toFixed(1);
       });
-      burstSpeedSlider.value = "2.0";
-      if (burstSpeedVal) burstSpeedVal.textContent = "2.0";
+      burstSpeedSlider.value = "1.0";
+      burstSpeedSlider.min = "0.1";
+      burstSpeedSlider.max = "5.0";
+      burstSpeedSlider.step = "0.1";
+      if (burstSpeedVal) burstSpeedVal.textContent = "1.0";
     }
 
     if (burstSizeSlider) {
@@ -592,8 +602,11 @@
         burstSize = parseFloat(burstSizeSlider.value);
         if (burstSizeVal) burstSizeVal.textContent = burstSize.toFixed(2);
       });
-      burstSizeSlider.value = "0.08";
-      if (burstSizeVal) burstSizeVal.textContent = "0.08";
+      burstSizeSlider.value = "0.05";
+      burstSizeSlider.min = "0.01";
+      burstSizeSlider.max = "0.3";
+      burstSizeSlider.step = "0.005";
+      if (burstSizeVal) burstSizeVal.textContent = "0.05";
     }
 
     if (burstSpreadSlider) {
@@ -601,8 +614,23 @@
         burstSpreadDeg = parseFloat(burstSpreadSlider.value);
         if (burstSpreadVal) burstSpreadVal.textContent = burstSpreadDeg.toFixed(0) + '°';
       });
-      burstSpreadSlider.value = "45";
-      if (burstSpreadVal) burstSpreadVal.textContent = "45°";
+      burstSpreadSlider.value = "30";
+      burstSpreadSlider.min = "5";
+      burstSpreadSlider.max = "180";
+      if (burstSpreadVal) burstSpreadVal.textContent = "30°";
+    }
+
+    if (burstDepthSlider) {
+      burstDepthSlider.addEventListener('input', () => {
+        burstDepth = parseFloat(burstDepthSlider.value);
+        if (burstDepthVal) burstDepthVal.textContent = burstDepth.toFixed(1);
+        // Aggiorna il piano virtuale (la normale è lungo -Z della camera, ma lo gestiamo al momento del raycast)
+      });
+      burstDepthSlider.value = "2.0";
+      burstDepthSlider.min = "0.5";
+      burstDepthSlider.max = "6.0";
+      burstDepthSlider.step = "0.1";
+      if (burstDepthVal) burstDepthVal.textContent = "2.0";
     }
 
     // Funzioni qualità...
@@ -703,7 +731,6 @@
       for (let sprite of particleSprites) {
         if (sprite.material) sprite.material.map = sharedTexture;
       }
-      // Aggiorna anche le texture delle burst particles esistenti
       for (let bp of burstParticles) {
         if (bp.sprite && bp.sprite.material) {
           bp.sprite.material.map = sharedTexture;
@@ -1605,7 +1632,35 @@
       }
     });
     
-    // ===== FUNZIONE BURST =====
+    // ===== FUNZIONE BURST CON PIANO VIRTUALE =====
+    function getVirtualPlanePoint(clientX, clientY) {
+      // Calcola il punto sul piano virtuale (orientato secondo la camera)
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      
+      raycaster.setFromCamera(pointer, renderCamera);
+      
+      // Crea un piano orientato lungo l'asse Z della camera
+      const camDir = new THREE.Vector3(0, 0, -1).applyQuaternion(renderCamera.quaternion);
+      const camPos = renderCamera.position.clone();
+      
+      // Il piano è definito da un punto a distanza burstDepth dalla camera lungo la direzione
+      const planePoint = camPos.clone().add(camDir.clone().multiplyScalar(burstDepth));
+      const planeNormal = camDir.clone().negate(); // normale verso la camera (per intersezione)
+      
+      const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, planePoint);
+      
+      const intersection = new THREE.Vector3();
+      const ray = raycaster.ray;
+      const result = ray.intersectPlane(plane, intersection);
+      
+      if (result) {
+        return { point: intersection, normal: camDir.clone().negate() };
+      }
+      return null;
+    }
+
     function spawnBurst(position, normal) {
       if (!burstEnabled) return;
       if (!sharedTexture) return;
@@ -1616,8 +1671,9 @@
       const spreadRad = burstSpreadDeg * Math.PI / 180;
       const color = new THREE.Color(particleColorPicker.value || '#39FBFE');
       
-      const baseDir = normal.clone();
-      baseDir.y += 0.5;
+      // Direzione base: verso la camera e un po' verso l'alto
+      const baseDir = normal.clone().negate();
+      baseDir.y += 0.3; // spinta verso l'alto
       baseDir.normalize();
       
       for (let i = 0; i < count; i++) {
@@ -1641,8 +1697,9 @@
         const speedVariation = 0.5 + Math.random() * 0.8;
         const finalSpeed = speed * speedVariation;
         const velocity = dir.multiplyScalar(finalSpeed);
-        velocity.x += (Math.random() - 0.5) * 0.2;
-        velocity.z += (Math.random() - 0.5) * 0.2;
+        velocity.x += (Math.random() - 0.5) * 0.15;
+        velocity.z += (Math.random() - 0.5) * 0.15;
+        velocity.y += (Math.random() - 0.5) * 0.1;
         
         const sizeVar = 0.6 + Math.random() * 0.8;
         const finalSize = size * sizeVar;
@@ -1675,35 +1732,8 @@
       }
     }
 
-    // ===== RAYCASTER PER CLICK/TOUCH =====
-    function getIntersection(clientX, clientY) {
-      const rect = renderer.domElement.getBoundingClientRect();
-      pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-      pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-      
-      raycaster.setFromCamera(pointer, renderCamera);
-      
-      const meshes = [];
-      scene.traverse((obj) => {
-        if (obj.isMesh && obj.type === 'Mesh') {
-          meshes.push(obj);
-        }
-      });
-      
-      const intersects = raycaster.intersectObjects(meshes);
-      if (intersects.length > 0) {
-        const hit = intersects[0];
-        return {
-          point: hit.point,
-          normal: hit.face.normal.clone().transformDirection(hit.object.matrixWorld)
-        };
-      }
-      return null;
-    }
-
-    // ===== EVENTI MOUSE =====
+    // ===== EVENTI MOUSE E TOUCH =====
     function onPointerDown(event) {
-      // Se è un click sulla UI, ignoriamo
       if (uiElements.style.display === 'block') {
         const panel = document.querySelector('.ui-panel');
         const rect = panel.getBoundingClientRect();
@@ -1713,34 +1743,23 @@
           return;
         }
       }
-      
       if (!burstEnabled) return;
       
       const clientX = event.clientX || event.pageX;
       const clientY = event.clientY || event.pageY;
       
-      const hit = getIntersection(clientX, clientY);
+      const hit = getVirtualPlanePoint(clientX, clientY);
       if (hit) {
         spawnBurst(hit.point, hit.normal);
-      } else {
-        const pos = new THREE.Vector3();
-        renderCamera.getWorldPosition(pos);
-        const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(renderCamera.quaternion);
-        const point = pos.clone().add(dir.clone().multiplyScalar(5));
-        const normal = new THREE.Vector3(0, 1, 0);
-        spawnBurst(point, normal);
       }
     }
 
-    // Eventi mouse
     window.addEventListener('click', onPointerDown);
     
-    // Touch: usiamo lo stesso meccanismo, ma senza interferire con pan/scrub
-    // Aggiungiamo un gestore touch specifico per il burst
+    // Touch: aggiungiamo il burst senza interferire con pan/scrub
     window.addEventListener('touchstart', (e) => {
       // Se il burst è attivo e c'è un solo tocco, genera lo scoppio
       if (burstEnabled && e.touches.length === 1 && !isTouchOnPanel) {
-        // Controlla se il tocco è sulla UI
         if (uiElements.style.display === 'block') {
           const panel = document.querySelector('.ui-panel');
           const rect = panel.getBoundingClientRect();
@@ -1751,22 +1770,14 @@
             return;
           }
         }
-        
         const touch = e.touches[0];
-        const hit = getIntersection(touch.clientX, touch.clientY);
+        const hit = getVirtualPlanePoint(touch.clientX, touch.clientY);
         if (hit) {
           spawnBurst(hit.point, hit.normal);
-        } else {
-          const pos = new THREE.Vector3();
-          renderCamera.getWorldPosition(pos);
-          const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(renderCamera.quaternion);
-          const point = pos.clone().add(dir.clone().multiplyScalar(5));
-          const normal = new THREE.Vector3(0, 1, 0);
-          spawnBurst(point, normal);
         }
       }
 
-      // Gestione touch esistente (pan/scrub/pinch) – la manteniamo identica
+      // Gestione touch esistente (pan/scrub/pinch)
       if (uiElements.style.display === 'block') {
         const panel = document.querySelector('.ui-panel');
         const rect = panel.getBoundingClientRect();
@@ -1908,8 +1919,23 @@
     }
     setTimeout(hideLoader, 10000);
 
+    // ===== CARICAMENTO GLB (con gestione texture mancanti) =====
     const loader = new GLTFLoader();
     
+    // Aggiungiamo un wrapper per ignorare errori di texture
+    const originalLoad = loader.load.bind(loader);
+    loader.load = function(url, onLoad, onProgress, onError) {
+      const customLoader = new GLTFLoader();
+      customLoader.manager = new THREE.LoadingManager();
+      customLoader.manager.onError = function(url) {
+        console.warn('⚠️ Texture non trovata (ignorata):', url);
+      };
+      customLoader.manager.onLoad = function() {
+        console.log('✅ Caricamento GLB completato (con texture mancanti ignorate)');
+      };
+      customLoader.load(url, onLoad, onProgress, onError);
+    };
+
     loader.load('./invito.glb', (gltf) => {
       if(gltfRoot) scene.remove(gltfRoot);
       gltfRoot = gltf.scene;
@@ -2008,12 +2034,29 @@
       if(xhr.total) setStatus(`Caricamento GLB: ${Math.round(xhr.loaded/xhr.total*100)}%`);
     }, (err) => {
       console.error('Errore caricamento GLB:', err);
-      setStatus('Errore caricamento GLB - avvio con sole bollicine');
-      if (!sharedTexture) {
-        sharedTexture = defaultBubbleTexture || createGradientCircleTexture();
+      if (err.message && err.message.includes('texture')) {
+        console.warn('⚠️ Errore texture ignorato, continuo...');
+        setStatus('⚠️ Caricamento GLB con texture mancanti');
+        if (!gltfRoot) {
+          const geometry = new THREE.BoxGeometry(1, 1, 1);
+          const material = new THREE.MeshStandardMaterial({ color: 0x888888 });
+          const cube = new THREE.Mesh(geometry, material);
+          cube.position.set(0, 0, -2);
+          scene.add(cube);
+          gltfRoot = cube;
+          animatedCamera = null;
+          setStatus('⚠️ Modello placeholder (texture mancanti)');
+        }
+        createParticles();
+        hideLoader();
+      } else {
+        setStatus('Errore caricamento GLB - avvio con sole bollicine');
+        if (!sharedTexture) {
+          sharedTexture = defaultBubbleTexture || createGradientCircleTexture();
+        }
+        createParticles();
+        hideLoader();
       }
-      createParticles();
-      hideLoader();
     });
     
     loadDefaultBubbleTexture();
@@ -2168,19 +2211,21 @@
     
     <hr>
 
-    <!-- ===== SEZIONE BURST ===== -->
+    <!-- ===== SEZIONE BURST (con controlli a valori bassi) ===== -->
     <div style="background: rgba(200,100,255,0.1); border-radius: 12px; padding: 10px; margin-bottom: 8px; border: 1px solid rgba(200,100,255,0.3);">
-      <div style="font-weight: bold; color: #dd99ff; margin-bottom: 6px; font-size: 12px;">💥 SCOPPIO BOLLICINE</div>
+      <div style="font-weight: bold; color: #dd99ff; margin-bottom: 6px; font-size: 12px;">💥 SCOPPIO BOLLICINE (piano virtuale)</div>
       <label><input type="checkbox" id="burstToggle"> 💥 Attiva (clicca sul 3D)</label>
-      <label>🔢 Quantità <span id="burstCountVal" class="value-display">15</span></label>
-      <input type="range" id="burstCount" min="1" max="50" step="1" value="15">
-      <label>⚡ Velocità <span id="burstSpeedVal" class="value-display">2.0</span></label>
-      <input type="range" id="burstSpeed" min="0.5" max="6.0" step="0.1" value="2.0">
-      <label>📏 Dimensione <span id="burstSizeVal" class="value-display">0.08</span></label>
-      <input type="range" id="burstSize" min="0.02" max="0.4" step="0.01" value="0.08">
-      <label>📐 Spread <span id="burstSpreadVal" class="value-display">45°</span></label>
-      <input type="range" id="burstSpread" min="10" max="180" step="1" value="45">
-      <div style="font-size: 10px; margin-top: 4px; color:#aaa;">Clicca/tocca sul modello 3D per generare un'esplosione di bollicine</div>
+      <label>🔢 Quantità <span id="burstCountVal" class="value-display">10</span></label>
+      <input type="range" id="burstCount" min="1" max="50" step="1" value="10">
+      <label>⚡ Velocità <span id="burstSpeedVal" class="value-display">1.0</span></label>
+      <input type="range" id="burstSpeed" min="0.1" max="5.0" step="0.1" value="1.0">
+      <label>📏 Dimensione <span id="burstSizeVal" class="value-display">0.05</span></label>
+      <input type="range" id="burstSize" min="0.01" max="0.3" step="0.005" value="0.05">
+      <label>📐 Spread <span id="burstSpreadVal" class="value-display">30°</span></label>
+      <input type="range" id="burstSpread" min="5" max="180" step="1" value="30">
+      <label>📏 Profondità piano <span id="burstDepthVal" class="value-display">2.0</span></label>
+      <input type="range" id="burstDepth" min="0.5" max="6.0" step="0.1" value="2.0">
+      <div style="font-size: 10px; margin-top: 4px; color:#aaa;">Le bollicine partono sempre da un piano virtuale davanti al modello, nel punto toccato.</div>
     </div>
 
     <hr>
@@ -2249,9 +2294,9 @@
     <div class="file-input-label" id="loadBackgroundBtn">📁 Carica immagine sfondo</div>
     <button id="resetBackgroundBtn">↺ Ripristina sfondo predefinito</button>
     <div style="font-size: 11px; margin-top: 8px; color:#aaa;">L'immagine 'asset/background.webp' viene caricata automaticamente.</div>
-    <div style="font-size: 11px; opacity:0.7; margin-top: 12px; text-align: center;">Scroll verticale = frame | 🔍 Pinch per zoom 2D | 💥 Attiva scoppio bollicine | Premi <kbd>U</kbd> per controlli</div>
+    <div style="font-size: 11px; opacity:0.7; margin-top: 12px; text-align: center;">Scroll verticale = frame | 🔍 Pinch per zoom 2D | 💥 Scoppio su piano virtuale | Premi <kbd>U</kbd> per controlli</div>
   </div>
-  <div id="hint">⬇️ Scroll / swipe: frame<br>🔍 Pinch: zoom 2D<br>💥 Attiva scoppio bollicine nella UI<br>🎛️ Premi <kbd>U</kbd> per controlli</div>
+  <div id="hint">⬇️ Scroll / swipe: frame<br>🔍 Pinch: zoom 2D<br>💥 Attiva scoppio bollicine (piano virtuale)<br>🎛️ Premi <kbd>U</kbd> per controlli</div>
   <div id="status">Inizializzazione...</div>
 </div>
 </body>
