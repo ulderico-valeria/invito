@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>GLB Frame Scrubber - Pinch Zoom</title>
+<title>GLB Frame Scrubber - Zoom 2D / 3D</title>
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
 <style>
@@ -36,9 +36,30 @@
     object-position: center;
     transition: filter 0.8s ease;
   }
-  /* Durante il caricamento lo sfondo è blurrato */
   #background-image.blurred {
     filter: blur(20px);
+  }
+
+  /* WRAPPER per il canvas (per lo zoom 2D) */
+  #canvas-wrapper {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    overflow: hidden;
+    pointer-events: none; /* lascia passare eventi al canvas */
+  }
+  #canvas-wrapper canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    user-select: none;
+    pointer-events: auto;
+    transform-origin: top left;
+    transition: transform 0.05s linear;
   }
 
   /* LOADER (sopra lo sfondo) */
@@ -52,9 +73,9 @@
     align-items: center;
     justify-content: center;
     z-index: 100;
-    pointer-events: none; /* per non bloccare eventuali interazioni, ma il caricamento blocca tutto */
+    pointer-events: none;
     transition: opacity 0.8s ease;
-    background: transparent; /* lo sfondo è l'immagine sottostante */
+    background: transparent;
   }
   #loader.hidden {
     opacity: 0;
@@ -67,26 +88,13 @@
     border-top: 4px solid #ffffff;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
-    background: rgba(0,0,0,0.1); /* leggero contrasto */
+    background: rgba(0,0,0,0.1);
     backdrop-filter: blur(2px);
     box-shadow: 0 0 30px rgba(0,0,0,0.3);
   }
   @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
-  }
-
-  /* CANVAS */
-  canvas {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: block;
-    z-index: 1;
-    touch-action: none;
-    user-select: none;
   }
 
   /* UI */
@@ -114,7 +122,6 @@
     pointer-events: none;
     opacity: 1;
     text-shadow: 0 0 5px rgba(0,0,0,0.5);
-    transition: none;
   }
   #scrollHint .material-icons {
     font-size: 36px;
@@ -423,6 +430,9 @@
     const envIntensitySlider = document.getElementById('envIntensity');
     const envIntensityVal = document.getElementById('envIntensityVal');
 
+    // NUOVO TOGGLE per modalità zoom
+    const zoomModeToggle = document.getElementById('zoomModeToggle');
+
     let currentEnvTexture = null;
     let composer = null;
     let bloomPass = null;
@@ -458,7 +468,7 @@
     let currentEnvIntensity = 1.0;
     let envMapRef = null;
     
-    // SCROLL HINT – sempre visibile
+    // SCROLL HINT
     let scrollHint = document.getElementById('scrollHint');
     if (!scrollHint) {
         scrollHint = document.createElement('div');
@@ -490,11 +500,78 @@
     let currentFPS = 0;
     let debugVisible = false;
 
-    // VARIABILI PER PINCH ZOOM (usando camera.zoom)
+    // ZOOM 3D (camera)
     let pinchZoomFactor = 1.0;
     let prevPinchDist = 0;
     let isTouchOnPanel = false;
-    
+
+    // ZOOM 2D (canvas transform)
+    let scale2d = 1.0;
+    let panX2d = 0;
+    let panY2d = 0;
+    let zoomMode = '3d'; // '3d' o '2d'
+    // Per pan 2D
+    let panStartX = 0, panStartY = 0;
+    let isPanning = false;
+    // Per pinch 2D
+    let prevPinchDist2d = 0;
+    let pinchStartScale = 1;
+    let pinchCenterX = 0, pinchCenterY = 0;
+
+    // Riferimento al canvas wrapper
+    const canvasWrapper = document.getElementById('canvas-wrapper');
+    const canvasEl = document.querySelector('canvas'); // sarà spostato nel wrapper
+
+    // Funzione per aggiornare la trasformazione 2D
+    function updateCanvasTransform() {
+      if (zoomMode === '2d') {
+        canvasEl.style.transform = `translate(${panX2d}px, ${panY2d}px) scale(${scale2d})`;
+      } else {
+        canvasEl.style.transform = 'none';
+      }
+    }
+
+    // Funzione per resettare lo zoom 2D
+    function resetZoom2D() {
+      scale2d = 1.0;
+      panX2d = 0;
+      panY2d = 0;
+      updateCanvasTransform();
+    }
+
+    // Funzione per resettare lo zoom 3D
+    function resetZoom3D() {
+      pinchZoomFactor = 1.0;
+      // La camera si aggiornerà al prossimo frame
+    }
+
+    // Cambio modalità
+    function setZoomMode(mode) {
+      if (mode === zoomMode) return;
+      zoomMode = mode;
+      zoomModeToggle.checked = (mode === '2d');
+      
+      if (mode === '2d') {
+        // Disabilita zoom 3D e resetta
+        resetZoom3D();
+        // Resetta anche eventuali offset di pan/zoom 2D
+        resetZoom2D();
+        // Disabilita lo scrub temporaneamente? Lo gestiamo nel touch
+        setStatus('🔍 Zoom 2D attivo – una dita pan, due dita zoom');
+      } else {
+        // Resetta zoom 2D e torna a 3D
+        resetZoom2D();
+        resetZoom3D();
+        setStatus('🎥 Zoom 3D attivo – una dita scrub, due dita zoom camera');
+      }
+      updateCanvasTransform();
+    }
+
+    // Ascolta il toggle
+    zoomModeToggle.addEventListener('change', (e) => {
+      setZoomMode(e.target.checked ? '2d' : '3d');
+    });
+
     // Funzione per applicare le impostazioni di qualità alle ombre
     function applyShadowQuality() {
       const size = parseInt(shadowMapSizeSelect.value);
@@ -692,7 +769,13 @@
     renderer.toneMappingExposure = 1.0;
     renderer.shadowMap.enabled = false;
     renderer.outputEncoding = THREE.sRGBEncoding;
-    document.body.appendChild(renderer.domElement);
+    
+    // Inserisci il canvas nel wrapper
+    if (canvasWrapper) {
+      canvasWrapper.appendChild(renderer.domElement);
+    } else {
+      document.body.appendChild(renderer.domElement);
+    }
     
     composer = new EffectComposer(renderer);
     const renderPass = new RenderPass(scene, null);
@@ -706,7 +789,7 @@
     
     renderCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 10000);
     renderCamera.position.set(0, 0, 5);
-    renderCamera.zoom = 1; // default
+    renderCamera.zoom = 1;
     
     let pmremGen = new THREE.PMREMGenerator(renderer);
     pmremGen.compileEquirectangularShader();
@@ -892,7 +975,6 @@
       lightControls.clear();
       lightsContainer.innerHTML = '';
       
-      // VALORI PREDEFINITI AGGIORNATI
       const defaultLightValues = {
         'spot': { intensity: 1.03, angle: 0.32, distance: 12.0, color: '#ffffff' },
         'spot001': { intensity: 1.01, angle: 0.48, distance: 0.0, color: '#ffffff' }
@@ -1204,9 +1286,13 @@
       renderCamera.near = animatedCamera.near || baseCameraNear;
       renderCamera.far = animatedCamera.far || baseCameraFar;
       
-      // Applica lo zoom: baseZoom * pinchZoomFactor, ma pinchZoomFactor non scende sotto 1
-      const baseZoom = animatedCamera.zoom || 1;
-      renderCamera.zoom = baseZoom * pinchZoomFactor;
+      // Applica zoom 3D solo se in modalità 3D
+      if (zoomMode === '3d') {
+        const baseZoom = animatedCamera.zoom || 1;
+        renderCamera.zoom = baseZoom * pinchZoomFactor;
+      } else {
+        renderCamera.zoom = animatedCamera.zoom || 1; // reset a base
+      }
       
       renderCamera.aspect = window.innerWidth / window.innerHeight;
       renderCamera.updateProjectionMatrix();
@@ -1519,9 +1605,13 @@
       }
     });
     
-    // Gestione Touch: scrub con 1 dito, pinch con 2 dita (ZOOM con camera.zoom)
+    // GESTIONE TOUCH UNIFICATA
     let touchStartY = 0;
     let touchAccum = 0;
+
+    // Per pan 2D
+    let panStartX = 0, panStartY = 0;
+    let isPanning = false;
 
     window.addEventListener('touchstart', (e) => {
       // Se il tocco è sul pannello UI, blocca
@@ -1537,50 +1627,90 @@
       }
       isTouchOnPanel = false;
 
-      if (e.touches.length === 2) {
-        // PINCH: salva la distanza iniziale
-        e.preventDefault();
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        prevPinchDist = Math.hypot(dx, dy);
-        touchAccum = 0; // resetta scrub
-      } else if (e.touches.length === 1) {
-        // SCRUB: una dita
-        touchStartY = e.touches[0].clientY;
-        touchAccum = 0;
+      if (zoomMode === '2d') {
+        // Modalità 2D: pan con una dita, pinch con due
+        if (e.touches.length === 1) {
+          // Inizia pan
+          isPanning = true;
+          panStartX = e.touches[0].clientX - panX2d;
+          panStartY = e.touches[0].clientY - panY2d;
+        } else if (e.touches.length === 2) {
+          // Inizia pinch
+          e.preventDefault();
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          prevPinchDist2d = Math.hypot(dx, dy);
+          pinchStartScale = scale2d;
+          // Centro del pinch
+          pinchCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+          pinchCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        }
+      } else {
+        // Modalità 3D: scrub con una dita, pinch con due
+        if (e.touches.length === 1) {
+          // Scrub
+          touchStartY = e.touches[0].clientY;
+          touchAccum = 0;
+        } else if (e.touches.length === 2) {
+          // Pinch 3D
+          e.preventDefault();
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          prevPinchDist = Math.hypot(dx, dy);
+          touchAccum = 0;
+        }
       }
     }, { passive: false });
 
     window.addEventListener('touchmove', (e) => {
       if (isTouchOnPanel) return;
 
-      if (e.touches.length === 2) {
-        // PINCH ZOOM – aggiorna il fattore, ma non scende sotto 1.0
-        e.preventDefault();
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const currentDist = Math.hypot(dx, dy);
-        
-        const ratio = currentDist / prevPinchDist;
-        // Limita lo zoom out: non scendere sotto 1.0, massimo 3.0
-        pinchZoomFactor = Math.max(1.0, Math.min(3.0, pinchZoomFactor * ratio));
-        
-        prevPinchDist = currentDist;
-        return;
-      }
-
-      if (e.touches.length === 1) {
-        // SCRUB – frame stepping
-        const delta = touchStartY - e.touches[0].clientY;
-        touchStartY = e.touches[0].clientY;
-        touchAccum += delta;
-        const thr = 14;
-        if (Math.abs(touchAccum) >= thr) {
-          const steps = Math.trunc(touchAccum / thr);
-          touchAccum -= steps * thr;
-          for (let i = 0; i < Math.abs(steps); i++) {
-            stepFrame(steps > 0 ? 1 : -1);
+      if (zoomMode === '2d') {
+        // Gestione 2D
+        if (e.touches.length === 1 && isPanning) {
+          // Pan
+          e.preventDefault();
+          panX2d = e.touches[0].clientX - panStartX;
+          panY2d = e.touches[0].clientY - panStartY;
+          updateCanvasTransform();
+        } else if (e.touches.length === 2) {
+          // Pinch zoom 2D
+          e.preventDefault();
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          const currentDist = Math.hypot(dx, dy);
+          const ratio = currentDist / prevPinchDist2d;
+          let newScale = pinchStartScale * ratio;
+          newScale = Math.max(0.5, Math.min(5, newScale));
+          scale2d = newScale;
+          // Aggiorna il centro del pinch per mantenere il punto sotto le dita
+          // (opzionale: si può anche non fare, ma per semplicità applichiamo solo lo zoom)
+          updateCanvasTransform();
+        }
+      } else {
+        // Modalità 3D
+        if (e.touches.length === 1) {
+          // Scrub
+          const delta = touchStartY - e.touches[0].clientY;
+          touchStartY = e.touches[0].clientY;
+          touchAccum += delta;
+          const thr = 14;
+          if (Math.abs(touchAccum) >= thr) {
+            const steps = Math.trunc(touchAccum / thr);
+            touchAccum -= steps * thr;
+            for (let i = 0; i < Math.abs(steps); i++) {
+              stepFrame(steps > 0 ? 1 : -1);
+            }
           }
+        } else if (e.touches.length === 2) {
+          // Pinch 3D (zoom camera)
+          e.preventDefault();
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          const currentDist = Math.hypot(dx, dy);
+          const ratio = currentDist / prevPinchDist;
+          pinchZoomFactor = Math.max(1.0, Math.min(3.0, pinchZoomFactor * ratio));
+          prevPinchDist = currentDist;
         }
       }
     }, { passive: false });
@@ -1588,6 +1718,7 @@
     window.addEventListener('touchend', (e) => {
       if (e.touches.length === 0) {
         isTouchOnPanel = false;
+        isPanning = false;
       }
     });
 
@@ -1613,10 +1744,10 @@
       composer.setSize(window.innerWidth, window.innerHeight);
       renderCamera.aspect = window.innerWidth / window.innerHeight;
       renderCamera.updateProjectionMatrix();
+      updateCanvasTransform();
     });
     
-    // LOADER: usa lo sfondo blurrato
-    // Aggiungiamo la classe 'blurred' all'immagine di sfondo all'avvio
+    // LOADER
     const bgImg = document.getElementById('background-image');
     if (bgImg) {
       bgImg.classList.add('blurred');
@@ -1628,14 +1759,11 @@
       if (loaderHidden) return;
       loaderHidden = true;
       if (loaderEl) loaderEl.classList.add('hidden');
-      // Rimuovi il blur dallo sfondo
       if (bgImg) {
         bgImg.classList.remove('blurred');
       }
       setStatus('Caricamento completato');
     }
-
-    // Timeout di sicurezza: nascondi loader dopo 10 secondi anche se il GLB non è caricato
     setTimeout(hideLoader, 10000);
 
     const loader = new GLTFLoader();
@@ -1732,8 +1860,6 @@
       }
       
       createParticles();
-      
-      // Nascondi loader dopo il caricamento
       hideLoader();
       
     }, (xhr) => {
@@ -1745,12 +1871,15 @@
         sharedTexture = defaultBubbleTexture || createGradientCircleTexture();
       }
       createParticles();
-      hideLoader(); // nascondi comunque dopo errore
+      hideLoader();
     });
     
     loadDefaultBubbleTexture();
     loadInitialEnvironment();
     loadDefaultBackground();
+    
+    // Imposta modalità iniziale
+    setZoomMode('3d');
     
     let lastFrameTime = performance.now();
     function animate() {
@@ -1799,7 +1928,7 @@
   })();
 </script>
 
-<!-- LOADER (sovrapposto allo sfondo) -->
+<!-- LOADER -->
 <div id="loader">
   <div class="spinner"></div>
 </div>
@@ -1812,6 +1941,9 @@
 <div id="mobileMenuBtn">☰</div>
 
 <div id="debugOverlay">FPS: --<br>Pixel ratio: --<br>Canvas: --x--</div>
+
+<!-- CANVAS WRAPPER -->
+<div id="canvas-wrapper"></div>
 
 <div class="ui-elements">
   <div id="toggleUI">🎛️</div>
@@ -1870,6 +2002,14 @@
       </label>
       <label>Bias ombre <span id="shadowBiasVal" class="value-display">0.0010</span></label>
       <input type="range" id="shadowBias" min="0" max="0.02" step="0.0001" value="0.001">
+      
+      <!-- TOGGLE ZOOM MODE -->
+      <label style="margin-top: 12px; border-top: 1px solid #444; padding-top: 12px;">
+        <input type="checkbox" id="zoomModeToggle"> 🔍 Zoom 2D (immagine)
+      </label>
+      <div style="font-size: 11px; color:#aaa; margin-top: -4px; margin-bottom: 8px;">
+        Off = Zoom 3D (camera) | On = Zoom 2D (canvas)
+      </div>
       
       <button id="applySettingsBtn" style="background: #2a6f5c; margin-top: 8px;">🔄 Applica impostazioni</button>
       <div style="font-size: 10px; margin-top: 4px; color:#aaa;">Applica le impostazioni senza ricaricare il modello (AA richiede ricarica pagina)</div>
@@ -1940,9 +2080,9 @@
     <div class="file-input-label" id="loadBackgroundBtn">📁 Carica immagine sfondo</div>
     <button id="resetBackgroundBtn">↺ Ripristina sfondo predefinito</button>
     <div style="font-size: 11px; margin-top: 8px; color:#aaa;">L'immagine 'asset/background.png' viene caricata automaticamente.</div>
-    <div style="font-size: 11px; opacity:0.7; margin-top: 12px; text-align: center;">Scroll verticale = frame preciso | 🔍 Pinch = zoom 3D | Premi <kbd>U</kbd> per controlli</div>
+    <div style="font-size: 11px; opacity:0.7; margin-top: 12px; text-align: center;">Scroll verticale = frame | 🔍 Toggle Zoom 2D/3D | Premi <kbd>U</kbd> per controlli</div>
   </div>
-  <div id="hint">⬇️ Scroll / swipe: frame<br>🔍 Pinch: zoom 3D (solo ingrandimento)<br>🎛️ Premi <kbd>U</kbd> per controlli</div>
+  <div id="hint">⬇️ Scroll / swipe: frame<br>🔍 Toggle nella UI per Zoom 2D/3D<br>🎛️ Premi <kbd>U</kbd> per controlli</div>
   <div id="status">Inizializzazione...</div>
 </div>
 </body>
