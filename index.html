@@ -122,17 +122,30 @@
     display: none !important;
   }
 
+  /* SCROLL HINT CON TESTO E ICONA */
   #scrollHint {
     position: fixed;
     bottom: 30px;
     left: 50%;
     transform: translateX(-50%);
-    color: white;
-    font-size: 36px;
     z-index: 25;
     pointer-events: none;
     opacity: 1;
     text-shadow: 0 0 5px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: white;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+  #scrollText {
+    font-size: 14px;
+    margin-bottom: 6px;
+    color: white;
+    text-shadow: 0 0 5px rgba(0,0,0,0.5);
+    font-weight: 400;
+    letter-spacing: 0.5px;
+    transition: opacity 0.3s ease;
   }
   #scrollHint .material-icons {
     font-size: 36px;
@@ -298,6 +311,7 @@
     .light-control { padding: 6px 8px; }
     #scrollHint { bottom: 20px; font-size: 28px; }
     #scrollHint .material-icons { font-size: 30px; }
+    #scrollText { font-size: 12px; }
   }
 </style>
 
@@ -449,14 +463,53 @@
     let currentEnvIntensity = 1.0;
     let envMapRef = null;
     
+    // SCROLL HINT – ora contiene anche il testo
     let scrollHint = document.getElementById('scrollHint');
     if (!scrollHint) {
         scrollHint = document.createElement('div');
         scrollHint.id = 'scrollHint';
-        scrollHint.innerHTML = '<span class="material-icons">keyboard_arrow_down</span>';
+        // Creiamo la struttura con testo e icona
+        const textSpan = document.createElement('span');
+        textSpan.id = 'scrollText';
+        textSpan.textContent = 'scorri';
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'material-icons';
+        iconSpan.textContent = 'keyboard_arrow_down';
+        scrollHint.appendChild(textSpan);
+        scrollHint.appendChild(iconSpan);
         document.body.appendChild(scrollHint);
+    } else {
+        // Assicuriamoci che la struttura sia corretta (potrebbe essere già presente)
+        // Se esiste solo l'icona, aggiungiamo il testo
+        const existingText = document.getElementById('scrollText');
+        if (!existingText) {
+            const textSpan = document.createElement('span');
+            textSpan.id = 'scrollText';
+            textSpan.textContent = 'scorri';
+            scrollHint.prepend(textSpan);
+        }
     }
     scrollHint.style.opacity = '1';
+
+    // Flag per il primo scroll
+    let hasScrolled = false;
+
+    // Funzione per aggiornare il testo dopo il primo scroll
+    function updateScrollText() {
+        const textEl = document.getElementById('scrollText');
+        if (textEl && !hasScrolled) {
+            textEl.textContent = 'continua a scorrere';
+            hasScrolled = true;
+        }
+    }
+
+    // Wrapper per stepFrame chiamato dagli eventi utente
+    function userStepFrame(direction) {
+        if (!hasScrolled) {
+            updateScrollText();
+        }
+        stepFrame(direction);
+    }
     
     let gltfRoot = null;
     let mixer = null;
@@ -503,7 +556,7 @@
     let burstCount = 3;
     let burstSpeed = 0.1;
     let burstSize = 0.01;
-    let burstSpreadDeg = 3;          // SPREAD 3°
+    let burstSpreadDeg = 3;
     let burstDepth = 0.5;
     let burstColor = new THREE.Color('#39FBFE');
 
@@ -540,7 +593,6 @@
         burstEnabled = e.target.checked;
         setStatus(burstEnabled ? '💥 Scoppio bollicine attivo (clicca sul 3D)' : '💥 Scoppio bollicine disattivato');
       });
-      // ATTIVATO DI DEFAULT
       burstToggle.checked = true;
       burstEnabled = true;
     }
@@ -585,7 +637,7 @@
         burstSpreadDeg = parseFloat(burstSpreadSlider.value);
         if (burstSpreadVal) burstSpreadVal.textContent = burstSpreadDeg.toFixed(0) + '°';
       });
-      burstSpreadSlider.value = "3";      // SPREAD 3
+      burstSpreadSlider.value = "3";
       burstSpreadSlider.min = "1";
       burstSpreadSlider.max = "180";
       if (burstSpreadVal) burstSpreadVal.textContent = "3°";
@@ -1784,7 +1836,8 @@
             const steps = Math.trunc(touchAccum / thr);
             touchAccum -= steps * thr;
             for (let i = 0; i < Math.abs(steps); i++) {
-              stepFrame(steps > 0 ? 1 : -1);
+              // Usiamo userStepFrame per segnare il primo scroll
+              userStepFrame(steps > 0 ? 1 : -1);
             }
           }
         } else if (isPanning) {
@@ -1829,7 +1882,7 @@
       }
     });
 
-    // Wheel per frame stepping
+    // Wheel per frame stepping – usando userStepFrame per il primo scroll
     window.addEventListener('wheel', (e) => {
       if (uiElements.style.display === 'block') {
         const panel = document.querySelector('.ui-panel');
@@ -1843,7 +1896,7 @@
       }
       e.preventDefault();
       if(!mixer || !frameTimes.length) return;
-      stepFrame(e.deltaY > 0 ? 1 : -1);
+      userStepFrame(e.deltaY > 0 ? 1 : -1);
     }, { passive: false });
     
     window.addEventListener('resize', () => {
