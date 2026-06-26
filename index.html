@@ -122,7 +122,7 @@
     display: none !important;
   }
 
-  /* SCROLL HINT CON TESTO E ICONA */
+  /* SCROLL HINT CON TESTO E ICONA ANIMATI */
   #scrollHint {
     position: fixed;
     bottom: 30px;
@@ -145,15 +145,21 @@
     text-shadow: 0 0 5px rgba(0,0,0,0.5);
     font-weight: 400;
     letter-spacing: 0.5px;
-    transition: opacity 0.3s ease;
+    /* Animazioni: bounce + pulse */
+    animation: bounce 1.2s infinite 0.2s, pulse 2s infinite 0.2s;
   }
   #scrollHint .material-icons {
     font-size: 36px;
     animation: bounce 1.2s infinite;
   }
+
   @keyframes bounce {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(8px); }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
   }
 
   .ui-panel {
@@ -468,7 +474,6 @@
     if (!scrollHint) {
         scrollHint = document.createElement('div');
         scrollHint.id = 'scrollHint';
-        // Creiamo la struttura con testo e icona
         const textSpan = document.createElement('span');
         textSpan.id = 'scrollText';
         textSpan.textContent = 'scorri';
@@ -479,8 +484,6 @@
         scrollHint.appendChild(iconSpan);
         document.body.appendChild(scrollHint);
     } else {
-        // Assicuriamoci che la struttura sia corretta (potrebbe essere già presente)
-        // Se esiste solo l'icona, aggiungiamo il testo
         const existingText = document.getElementById('scrollText');
         if (!existingText) {
             const textSpan = document.createElement('span');
@@ -491,10 +494,8 @@
     }
     scrollHint.style.opacity = '1';
 
-    // Flag per il primo scroll
     let hasScrolled = false;
 
-    // Funzione per aggiornare il testo dopo il primo scroll
     function updateScrollText() {
         const textEl = document.getElementById('scrollText');
         if (textEl && !hasScrolled) {
@@ -503,7 +504,6 @@
         }
     }
 
-    // Wrapper per stepFrame chiamato dagli eventi utente
     function userStepFrame(direction) {
         if (!hasScrolled) {
             updateScrollText();
@@ -577,7 +577,6 @@
       updateCanvasTransform();
     }
 
-    // Imposta max zoom
     if (maxZoom2dSlider) {
       maxZoom2dSlider.addEventListener('input', () => {
         maxZoom2d = parseFloat(maxZoom2dSlider.value);
@@ -587,7 +586,7 @@
       if (maxZoom2dVal) maxZoom2dVal.textContent = "5.0";
     }
 
-    // ===== BURST CONTROLS con valori predefiniti =====
+    // ===== BURST CONTROLS =====
     if (burstToggle) {
       burstToggle.addEventListener('change', (e) => {
         burstEnabled = e.target.checked;
@@ -655,7 +654,6 @@
       if (burstDepthVal) burstDepthVal.textContent = "0.5";
     }
 
-    // Funzioni qualità...
     function applyShadowQuality() {
       const size = parseInt(shadowMapSizeSelect.value);
       const typeMap = { '0': THREE.PCFShadowMap, '1': THREE.PCFSoftShadowMap, '2': THREE.VSMShadowMap };
@@ -687,7 +685,6 @@
       setStatus('✅ Impostazioni qualità applicate (AA richiede ricarica)');
     }
 
-    // Carica texture bollicine default
     function loadDefaultBubbleTexture() {
       const imgLoader = new THREE.TextureLoader();
       imgLoader.load('./asset/bubble_b.webp', 
@@ -1620,8 +1617,6 @@
       }, 2000);
     });
     
-    // Pulsanti UI nascosti – non serve gestire click su toggleUI perché non visibile
-    // Ma manteniamo la scorciatoia U per aprire il pannello
     let uiVisible = false;
     function toggleUI() {
       uiVisible = !uiVisible;
@@ -1709,7 +1704,6 @@
         const sizeVar = 0.6 + Math.random() * 0.8;
         const finalSize = size * sizeVar;
         
-        // MATERIALE CON DEPTH TEST DISABILITATO PER STARE SEMPRE DAVANTI
         const mat = new THREE.SpriteMaterial({
           map: sharedTexture,
           color: color,
@@ -1836,7 +1830,6 @@
             const steps = Math.trunc(touchAccum / thr);
             touchAccum -= steps * thr;
             for (let i = 0; i < Math.abs(steps); i++) {
-              // Usiamo userStepFrame per segnare il primo scroll
               userStepFrame(steps > 0 ? 1 : -1);
             }
           }
@@ -1882,7 +1875,7 @@
       }
     });
 
-    // Wheel per frame stepping – usando userStepFrame per il primo scroll
+    // Wheel per frame stepping
     window.addEventListener('wheel', (e) => {
       if (uiElements.style.display === 'block') {
         const panel = document.querySelector('.ui-panel');
@@ -2064,7 +2057,6 @@
     
     resetZoom2D();
     
-    // Assicura che lo scoppio sia attivo
     burstToggle.checked = true;
     burstEnabled = true;
     
@@ -2150,7 +2142,6 @@
 
 <!-- UI -->
 <div class="ui-elements">
-  <!-- Il pulsante #toggleUI non è più visibile -->
   <div id="uiPanel" class="ui-panel">
     <div style="font-weight: bold; margin-bottom: 6px;">🎨 CONTROLLI FX</div>
     
@@ -2215,7 +2206,7 @@
     
     <hr>
 
-    <!-- ===== SEZIONE BURST (valori predefiniti bassi) ===== -->
+    <!-- ===== SEZIONE BURST ===== -->
     <div style="background: rgba(200,100,255,0.1); border-radius: 12px; padding: 10px; margin-bottom: 8px; border: 1px solid rgba(200,100,255,0.3);">
       <div style="font-weight: bold; color: #dd99ff; margin-bottom: 6px; font-size: 12px;">💥 SCOPPIO BOLLICINE (piano virtuale)</div>
       <label><input type="checkbox" id="burstToggle" checked> 💥 Attiva (clicca sul 3D)</label>
