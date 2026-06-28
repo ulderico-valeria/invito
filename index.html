@@ -317,6 +317,608 @@
     .light-control { padding: 6px 8px; }
     #scrollHint { bottom: 20px; font-size: 28px; }
     #scrollHint .material-icons { font-size: 30px; }
+    #scrollText { 
+      font-size: 16px;  /* <-- MODIFICATO: ora 16px su smartphone */
+    }
+  }
+</style>
+
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
+    }
+  }
+</script>
+
+<script type="module">
+  import * as THREE from 'three';
+  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+  import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+  import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+  import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+  
+  (function () {
+    const statusEl = document.getElementById('status');
+    function setStatus(msg) { if(statusEl) statusEl.textContent = msg; }
+
+    // UI elements
+    const uiElements = document.querySelector('.ui-elements');
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const exposureSlider = document.getElementById('exposure');
+    const exposureVal = document.getElementById('exposureVal');
+    const bloomToggle = document.getElementById('bloomToggle');
+    const bloomIntensity = document.getElementById('bloomIntensity');
+    const bloomVal = document.getElementById('bloomVal');
+    const rotSlider = document.getElementById('hdrRotate');
+    const rotVal = document.getElementById('rotVal');
+    const loadHdrBtn = document.getElementById('loadHdrFile');
+    const loadBackgroundBtn = document.getElementById('loadBackgroundBtn');
+    const resetBackgroundBtn = document.getElementById('resetBackgroundBtn');
+    const loadBubbleTextureBtn = document.getElementById('loadBubbleTextureBtn');
+    const resetBubbleTextureBtn = document.getElementById('resetBubbleTextureBtn');
+
+    const shadowsToggle = document.getElementById('shadowsToggle');
+    const envToggle = document.getElementById('envToggle');
+    const lightsGlobalToggle = document.getElementById('lightsGlobalToggle');
+    
+    const aaToggle = document.getElementById('aaToggle');
+    const pixelRatioSelect = document.getElementById('pixelRatioSelect');
+    const toneMappingSelect = document.getElementById('toneMappingSelect');
+    const outputEncodingToggle = document.getElementById('outputEncodingToggle');
+    const debugOverlayToggle = document.getElementById('debugOverlayToggle');
+    const debugOverlay = document.getElementById('debugOverlay');
+    const applySettingsBtn = document.getElementById('applySettingsBtn');
+
+    const shadowMapSizeSelect = document.getElementById('shadowMapSize');
+    const shadowMapTypeSelect = document.getElementById('shadowMapType');
+    const shadowBiasSlider = document.getElementById('shadowBias');
+    const shadowBiasVal = document.getElementById('shadowBiasVal');
+
+    const particleCountSlider = document.getElementById('particleCount');
+    const particleCountVal = document.getElementById('particleCountVal');
+    const particleSizeSlider = document.getElementById('particleSize');
+    const particleSizeVal = document.getElementById('particleSizeVal');
+    const particleSpeedSlider = document.getElementById('particleSpeed');
+    const particleSpeedVal = document.getElementById('particleSpeedVal');
+    const particleRandomnessSlider = document.getElementById('particleRandomness');
+    const particleRandomnessVal = document.getElementById('particleRandomnessVal');
+    const particleOpacitySlider = document.getElementById('particleOpacity');
+    const particleOpacityVal = document.getElementById('particleOpacityVal');
+    const particleColorPicker = document.getElementById('particleColor');
+    const particleColorVal = document.getElementById('particleColorVal');
+    const particleToggle = document.getElementById('particleToggle');
+    
+    const bubbleRotSpeedSlider = document.getElementById('bubbleRotSpeed');
+    const bubbleRotSpeedVal = document.getElementById('bubbleRotSpeedVal');
+    const bubbleRotRandomness = document.getElementById('bubbleRotRandomness');
+    const bubbleRotRandomnessVal = document.getElementById('bubbleRotRandomnessVal');
+
+    const rotXSpeed = document.getElementById('rotXSpeed');
+    const rotXSpeedVal = document.getElementById('rotXSpeedVal');
+    const rotXAmpl = document.getElementById('rotXAmpl');
+    const rotXAmplVal = document.getElementById('rotXAmplVal');
+    const rotYSpeed = document.getElementById('rotYSpeed');
+    const rotYSpeedVal = document.getElementById('rotYSpeedVal');
+    const rotYAmpl = document.getElementById('rotYAmpl');
+    const rotYAmplVal = document.getElementById('rotYAmplVal');
+    const rotZSpeed = document.getElementById('rotZSpeed');
+    const rotZSpeedVal = document.getElementById('rotZSpeedVal');
+    const rotZAmpl = document.getElementById('rotZAmpl');
+    const rotZAmplVal = document.getElementById('rotZAmplVal');
+    const rotMasterToggle = document.getElementById('rotMasterToggle');
+
+    const offsetCheckbox = document.getElementById('offsetCheckbox');
+    const testOffsetBtn = document.getElementById('testOffsetBtn');
+
+    const lightsGlobalIntensity = document.getElementById('lightsGlobalIntensity');
+    const lightsGlobalIntensityVal = document.getElementById('lightsGlobalIntensityVal');
+    const lightsContainer = document.getElementById('lightsContainer');
+    const envIntensitySlider = document.getElementById('envIntensity');
+    const envIntensityVal = document.getElementById('envIntensityVal');
+
+    // Controlli zoom 2D
+    const maxZoom2dSlider = document.getElementById('maxZoom2dSlider');
+    const maxZoom2dVal = document.getElementById('maxZoom2dVal');
+
+    // ===== CONTROLLI BURST =====
+    const burstToggle = document.getElementById('burstToggle');
+    const burstCountSlider = document.getElementById('burstCount');
+    const burstCountVal = document.getElementById('burstCountVal');
+    const burstSpeedSlider = document.getElementById('burstSpeed');
+    const burstSpeedVal = document.getElementById('burstSpeedVal');
+    const burstSizeSlider = document.getElementById('burstSize');
+    const burstSizeVal = document.getElementById('burstSizeVal');
+    const burstSpreadSlider = document.getElementById('burstSpread');
+    const burstSpreadVal = document.getElementById('burstSpreadVal');
+    const burstDepthSlider = document.getElementById('burstDepth');
+    const burstDepthVal = document.getElementById('burstDepthVal');
+
+    let currentEnvTexture = null;
+    let composer = null;
+    let bloomPass = null;
+    let bloomEnabled = false;
+    
+    let particleSprites = [];
+    let particlePositions = [];
+    let particleVelocities = [];
+    let particleRotations = [];
+    let particleRotSpeeds = [];
+    let particleEnabled = true;
+    let sharedTexture = null;
+    let customBubbleTexture = null;
+    let defaultBubbleTexture = null;
+    
+    let armatureObj = null;
+    let rotClock = 0;
+    let resetting = false;
+    let resetFinished = false;
+    let currentResetRot = new THREE.Euler(0, 0, 0);
+    let targetResetRot = new THREE.Euler(0, 0, 0);
+    let resetLerpSpeed = 0.08;
+    
+    let offsetEnabled = false;
+    let originalCameraPos = new THREE.Vector3();
+    let testTimeout = null;
+    
+    let allLights = [];
+    let lightControls = new Map();
+    let lightsGlobalActive = true;
+    
+    let envActive = true;
+    let currentEnvIntensity = 1.0;
+    let envMapRef = null;
+    
+    // SCROLL HINT
+    let scrollHint = document.getElementById('scrollHint');
+    if (!scrollHint) {
+        scrollHint = document.createElement('div');
+        scrollHint.id = 'scrollHint';
+        const textSpan = document.createElement('span');
+        textSpan.id = 'scrollText';
+        textSpan.textContent = 'scorri';
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'material-icons';
+        iconSpan.textContent = 'keyboard_arrow_down';
+        scrollHint.appendChild(textSpan);
+        scrollHint.appendChild(iconSpan);
+        document.body.appendChild(scrollHint);
+    } else {
+        const existingText = document.getElementById('scrollText');
+        if (!existingText) {
+            const textSpan = document.createElement('span');
+            textSpan.id = 'scrollText';
+            textSpan.textContent = 'scorri';
+            scrollHint.prepend(textSpan);
+        }
+    }
+    scrollHint.style.opacity = '1';
+
+    let hasScrolled = false;
+
+    function updateScrollText() {
+        const textEl = document.getElementById('scrollText');
+        if (textEl && !hasScrolled) {
+            textEl.textContent = 'continua a scorrere';
+            hasScrolled = true;
+        }
+    }
+
+    function userStepFrame(direction) {
+        if (!hasScrolled) {
+            updateScrollText();
+        }
+        stepFrame(direction);
+    }
+    
+    let gltfRoot = null;
+    let mixer = null;
+    let clipDuration = 0;
+    let frameTimes = [];
+    let currentFrameIndex = 0;
+    let currentTime = 0;
+    let targetTime = 0;
+    let animatedCamera = null;
+    let baseCameraFov = 45;
+    let baseCameraNear = 0.01;
+    let baseCameraFar = 10000;
+    
+    let cameraSmoothOffset = 0;
+    const CAMERA_OFFSET_TARGET = -0.01;
+    const MAX_FRAME = 340;
+    
+    let scene, renderer, renderCamera;
+    let frameCount = 0;
+    let fpsTime = 0;
+    let currentFPS = 0;
+    let debugVisible = false;
+
+    // ZOOM 2D
+    let scale2d = 1.0;
+    let panX2d = 0;
+    let panY2d = 0;
+    let maxZoom2d = 5.0;
+    let isPanning = false;
+    let isScrubbing = false;
+    let panStartX = 0, panStartY = 0;
+    let prevPinchDist2d = 0;
+    let pinchStartScale = 1;
+    let pinchStartPanX = 0, pinchStartPanY = 0;
+    let pinchCenterX = 0, pinchCenterY = 0;
+    let isTouchOnPanel = false;
+
+    let touchStartY = 0;
+    let touchAccum = 0;
+
+    // ===== BURST PARTICLES =====
+    let burstParticles = [];
+    let burstEnabled = false;
+    let burstCount = 3;
+    let burstSpeed = 0.1;
+    let burstSize = 0.01;
+    let burstSpreadDeg = 3;
+    let burstDepth = 0.5;
+    let burstColor = new THREE.Color('#39FBFE');
+
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+
+    let canvasEl = null;
+
+    function updateCanvasTransform() {
+      if (!canvasEl) return;
+      canvasEl.style.transform = `translate(${panX2d}px, ${panY2d}px) scale(${scale2d})`;
+    }
+
+    function resetZoom2D() {
+      scale2d = 1.0;
+      panX2d = 0;
+      panY2d = 0;
+      updateCanvasTransform();
+    }
+
+    if (maxZoom2dSlider) {
+      maxZoom2dSlider.addEventListener('input', () => {
+        maxZoom2d = parseFloat(maxZoom2dSlider.value);
+        if (maxZoom2dVal) maxZoom2dVal.textContent = maxZoom2d.toFixed(1);
+      });
+      maxZoom2dSlider.value = "5.0";
+      if (maxZoom2dVal) maxZoom2dVal.textContent = "5.0";
+    }
+
+    // ===== BURST CONTROLS =====
+    if (burstToggle) {
+      burstToggle.addEventListener('change', (e) => {
+        burstEnabled = e.target.checked;
+        setStatus(burstEnabled ? '💥 Scoppio bollicine attivo (clicca sul 3D)' : '💥 Scoppio bollicine disattivato');
+      });
+      burstToggle.checked = true;
+      burstEnabled = true;
+    }
+
+    if (burstCountSlider) {
+      burstCountSlider.addEventListener('input', () => {
+        burstCount = parseInt(burstCountSlider.value);
+        if (burstCountVal) burstCountVal.textContent = burstCount;
+      });
+      burstCountSlider.value = "3";
+      burstCountSlider.min = "1";
+      burstCountSlider.max = "50";
+      if (burstCountVal) burstCountVal.textContent = "3";
+    }
+
+    if (burstSpeedSlider) {
+      burstSpeedSlider.addEventListener('input', () => {
+        burstSpeed = parseFloat(burstSpeedSlider.value);
+        if (burstSpeedVal) burstSpeedVal.textContent = burstSpeed.toFixed(1);
+      });
+      burstSpeedSlider.value = "0.1";
+      burstSpeedSlider.min = "0.1";
+      burstSpeedSlider.max = "5.0";
+      burstSpeedSlider.step = "0.1";
+      if (burstSpeedVal) burstSpeedVal.textContent = "0.1";
+    }
+
+    if (burstSizeSlider) {
+      burstSizeSlider.addEventListener('input', () => {
+        burstSize = parseFloat(burstSizeSlider.value);
+        if (burstSizeVal) burstSizeVal.textContent = burstSize.toFixed(2);
+      });
+      burstSizeSlider.value = "0.01";
+      burstSizeSlider.min = "0.005";
+      burstSizeSlider.max = "0.3";
+      burstSizeSlider.step = "0.005";
+      if (burstSizeVal) burstSizeVal.textContent = "0.01";
+    }
+
+    if (burstSpreadSlider) {
+      burstSpreadSlider.addEventListener('input', () => {
+        burstSpreadDeg = parseFloat(burstSpreadSlider.value);
+        if (    background-color: #000;
+  }
+  #background-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    transition: filter 0.8s ease;
+  }
+  #background-image.blurred {
+    filter: blur(20px);
+  }
+
+  #canvas-wrapper {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  #canvas-wrapper canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    user-select: none;
+    pointer-events: auto;
+    transform-origin: top left;
+    transition: transform 0.05s linear;
+  }
+
+  #loader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    pointer-events: none;
+    transition: opacity 0.8s ease;
+    background: transparent;
+  }
+  #loader.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(255,255,255,0.2);
+    border-top: 4px solid #ffffff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    background: rgba(0,0,0,0.1);
+    backdrop-filter: blur(2px);
+    box-shadow: 0 0 30px rgba(0,0,0,0.3);
+  }
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .ui-elements {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 20;
+    display: none;
+  }
+  .ui-elements > * {
+    pointer-events: auto;
+  }
+
+  /* PULSANTI UI NASCOSTI */
+  #toggleUI,
+  #mobileMenuBtn {
+    display: none !important;
+  }
+
+  /* SCROLL HINT CON TESTO E ICONA ANIMATI */
+  #scrollHint {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 25;
+    pointer-events: none;
+    opacity: 1;
+    text-shadow: 0 0 5px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: white;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+  #scrollText {
+    font-size: 14px;
+    margin-bottom: 6px;
+    color: white;
+    text-shadow: 0 0 5px rgba(0,0,0,0.5);
+    font-weight: 400;
+    letter-spacing: 0.5px;
+    /* Animazioni: bounce + pulse */
+    animation: bounce 1.2s infinite 0.2s, pulse 2s infinite 0.2s;
+  }
+  #scrollHint .material-icons {
+    font-size: 36px;
+    animation: bounce 1.2s infinite;
+  }
+
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(8px); }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+
+  .ui-panel {
+    position: fixed;
+    bottom: 80px;
+    left: 20px;
+    right: 20px;
+    max-width: 480px;
+    background: rgba(20,20,28,0.94);
+    backdrop-filter: blur(16px);
+    border-radius: 24px;
+    padding: 16px 18px;
+    color: #f0f0f0;
+    font-size: 14px;
+    border: 1px solid rgba(255,255,255,0.25);
+    max-height: 70vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    overscroll-behavior: contain;
+  }
+  .ui-panel label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    margin-bottom: 6px;
+  }
+  .ui-panel input[type="range"] {
+    width: 100%;
+    cursor: pointer;
+    background: #2c2c38;
+    height: 4px;
+    border-radius: 4px;
+  }
+  .ui-panel input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    margin-right: 10px;
+    accent-color: #4a9eff;
+  }
+  .ui-panel select {
+    width: 100%;
+    padding: 6px;
+    background: #2c2c38;
+    border: none;
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+  }
+  .ui-panel input[type="color"] {
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    border: 2px solid white;
+    border-radius: 8px;
+    background: transparent;
+  }
+  .ui-panel button {
+    background: #3a3a4a;
+    border: none;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 40px;
+    font-size: 12px;
+    cursor: pointer;
+    flex: 1;
+    transition: 0.1s;
+  }
+  .ui-panel button:active { background: #5a5a7a; transform: scale(0.96); }
+  .file-input-label {
+    background: #2a6f5c;
+    text-align: center;
+    padding: 8px 0;
+    border-radius: 40px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-top: 8px;
+    display: block;
+  }
+  hr { border-color: #444; margin: 12px 0; }
+  .value-display { font-family: monospace; background: #00000066; padding: 2px 8px; border-radius: 20px; font-size: 12px; }
+  .light-control {
+    background: rgba(0,0,0,0.3);
+    border-radius: 16px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+  }
+  .light-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+    font-size: 13px;
+    color: #ffaa66;
+  }
+  #status {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    background: rgba(0,0,0,0.72);
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    color: #d9ffd9;
+    pointer-events: none;
+    white-space: pre-line;
+  }
+  #hint {
+    position: fixed;
+    left: 16px;
+    top: 16px;
+    background: rgba(0,0,0,0.5);
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    color: white;
+    pointer-events: none;
+  }
+  #debugOverlay {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    background: rgba(0,0,0,0.8);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 11px;
+    color: #0f0;
+    z-index: 35;
+    pointer-events: none;
+    display: none;
+    line-height: 1.4;
+    min-width: 140px;
+    text-align: right;
+  }
+  #debugOverlay.show {
+    display: block;
+  }
+
+  @media (max-width: 600px) {
+    .ui-panel { 
+      max-width: 280px; 
+      padding: 12px 14px; 
+      max-height: 65vh;
+    }
+    #toggleUI { width: 42px; height: 42px; line-height: 42px; font-size: 22px; bottom: 16px; left: 16px; }
+    #mobileMenuBtn { 
+      width: 42px; 
+      height: 42px; 
+      font-size: 22px; 
+      top: 16px; 
+      right: 16px; 
+      display: flex !important; 
+    }
+    .light-control { padding: 6px 8px; }
+    #scrollHint { bottom: 20px; font-size: 28px; }
+    #scrollHint .material-icons { font-size: 30px; }
     #scrollText { font-size: 12px; }
   }
 </style>
